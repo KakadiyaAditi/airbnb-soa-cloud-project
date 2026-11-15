@@ -95,6 +95,18 @@ async function createBooking(input) {
   const { listingId, guestName, guestEmail, numberOfGuests, checkIn, checkOut, nights } = input;
 
   const listing = await listingService.getListingById(listingId, 'listingId');
+  // Reject corrupt legacy/imported rates before claiming any nights.
+  if (
+    !Number.isFinite(listing.pricePerNight) ||
+    listing.pricePerNight < 1 ||
+    !Number.isSafeInteger(Math.round(listing.pricePerNight * nights * 100))
+  ) {
+    throw new ApiError(
+      409,
+      'INVALID_LISTING_PRICE',
+      'This listing has an invalid price. Please choose another stay.'
+    );
+  }
 
   if (numberOfGuests > listing.maxGuests) {
     throw new ApiError(

@@ -4,7 +4,7 @@ Responsive Airbnb-inspired accommodation search and booking interface, compatibl
 
 Features include saved stays, side-by-side comparison, amenity filters, reserved-date calendar, photo viewer, live booking estimates, and printable/calendar itineraries.
 
-The latest combined project is on `integration/frontend-backend`, containing both `backend/` and `frontend/`. `feature/member2-frontend` contains the matching frontend only. `main` retains the previous merged version. Member 1's original branch is unchanged; this integration branch extends its API with protected booking management while retaining guest booking and cancellation workflows.
+The latest tested combined project is on `main` and `integration/frontend-backend`, containing both `backend/` and `frontend/`. `feature/member2-frontend` contains the matching frontend only. Member 1's original branch is unchanged; the combined API extends its services with protected booking management while retaining guest booking and cancellation workflows. See the detailed verification record in [backend/docs/TESTING.md](backend/docs/TESTING.md).
 
 ## Search and booking management
 
