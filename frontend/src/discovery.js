@@ -18,11 +18,13 @@ export async function fetchInventory(api, signal) {
 
 export function inventoryFacets(listings) {
   const destinations = new Map();
+  const countryKeys = new Set();
+  const keyFor = (value) => String(value).trim().toLowerCase();
   const types = new Set(),
     amenities = new Set(),
     countries = new Set();
   for (const listing of listings) {
-    const key = JSON.stringify([listing.city, listing.country]);
+    const key = JSON.stringify([keyFor(listing.city), keyFor(listing.country)]);
     const existing = destinations.get(key);
     if (existing) {
       existing.count++;
@@ -36,18 +38,29 @@ export function inventoryFacets(listings) {
         image: listing.imageUrls?.[0],
       });
     types.add(listing.propertyType);
-    countries.add(listing.country);
+    if (!countryKeys.has(keyFor(listing.country))) {
+      countries.add(listing.country);
+      countryKeys.add(keyFor(listing.country));
+    }
     for (const amenity of listing.amenities || []) amenities.add(amenity);
   }
   const alphabetical = (values) =>
     [...values].sort((a, b) => a.localeCompare(b));
+  const countryNames = new Map(
+    [...countries].map((country) => [keyFor(country), country]),
+  );
   return {
-    destinations: [...destinations.values()].sort(
-      (a, b) =>
-        b.count - a.count ||
-        a.city.localeCompare(b.city) ||
-        a.country.localeCompare(b.country),
-    ),
+    destinations: [...destinations.values()]
+      .map((destination) => ({
+        ...destination,
+        country: countryNames.get(keyFor(destination.country)),
+      }))
+      .sort(
+        (a, b) =>
+          b.count - a.count ||
+          a.city.localeCompare(b.city) ||
+          a.country.localeCompare(b.country),
+      ),
     types: alphabetical(types),
     amenities: alphabetical(amenities),
     countries: alphabetical(countries),

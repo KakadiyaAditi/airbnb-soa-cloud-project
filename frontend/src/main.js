@@ -106,6 +106,7 @@ function home() {
   document.querySelector('[name="sort"]').value =
     filters.get("sort") || "newest";
   let propertyType = filters.get("propertyType") || "";
+  let automaticCountry = Boolean(filters.get("city") && filters.get("country"));
   const update = () => {
     const values = {
       ...Object.fromEntries(new FormData(document.querySelector("#search"))),
@@ -149,9 +150,12 @@ function home() {
     };
   document.querySelector('#search [name="location"]').oninput = () => {
     document.querySelector('#search [name="city"]').value = "";
+    if (automaticCountry) document.querySelector('[name="country"]').value = "";
+    automaticCountry = false;
   };
   document.querySelector('[name="country"]').onchange = () => {
     document.querySelector('#search [name="city"]').value = "";
+    automaticCountry = false;
     update();
   };
   disposeDiscovery = mountDiscovery({
@@ -168,6 +172,7 @@ function home() {
         destination.city;
       document.querySelector('#search [name="city"]').value = destination.city;
       document.querySelector('[name="country"]').value = destination.country;
+      automaticCountry = true;
       update();
     },
   });
@@ -216,6 +221,9 @@ async function loadResults(filters, page) {
       const params = new URLSearchParams(location.hash.split("?")[1]);
       params.set("page", p);
       history.replaceState(null, "", `#/?${params}`);
+      try {
+        sessionStorage.setItem("stay-results", location.hash);
+      } catch {}
       loadResults(filters, p);
       document.querySelector("#stays").scrollIntoView();
     };
@@ -535,6 +543,11 @@ document.querySelector("nav").addEventListener("click", (event) => {
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") closeMenu();
 });
+document.querySelector(".skip").addEventListener("click", (event) => {
+  event.preventDefault();
+  main.focus({ preventScroll: true });
+  main.scrollIntoView({ block: "start" });
+});
 async function copyText(text, message) {
   try {
     await navigator.clipboard.writeText(text);
@@ -568,6 +581,8 @@ document.addEventListener(
       event.target.dataset.fallback = "true";
       event.target.classList.add("image-unavailable");
       event.target.alt = "Property photo unavailable";
+      event.target.removeAttribute("srcset");
+      event.target.removeAttribute("sizes");
       event.target.src = "/images/property-placeholder.svg";
     }
   },

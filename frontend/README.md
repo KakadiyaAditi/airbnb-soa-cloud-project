@@ -169,3 +169,9 @@ node scripts/review-stay-photos.mjs
 ```
 
 The first command uses the public Unsplash image URLs recorded in the script and requires internet access. The review command writes `test-results/photo-contact-sheet.png`. Tests check that every sample album resolves, custom images remain untouched, and actual local photos decode in the browser and enlarged gallery.
+
+## Integration bug regressions
+
+`tests/bug-regressions.test.js` covers request timeout/cancellation composition and case-insensitive destination grouping. `e2e/bug-regressions.spec.js` covers keyboard skip navigation, editing an automatically selected destination, returning to the correct results page, responsive-image fallback loading, and removing deleted saved properties while retaining selections during temporary service failures. These tests initially reproduced the defects before the fixes.
+
+Manual checks: use Tab/Enter on Skip to content; select London then type Paris; open a stay from results page 2 and return; block a responsive image request to see the placeholder; restart a temporary demo database and remove old 404 selections using Remove unavailable stays. A temporary API outage should offer retry and keep the saved selections. Requests remain cancellable when navigating and time out after 15 seconds with a retryable message.
