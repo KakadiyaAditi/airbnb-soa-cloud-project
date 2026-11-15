@@ -21,7 +21,11 @@ const listingService = require('../listing/listing.service');
 const availabilityService = require('../availability/availability.service');
 
 function isDuplicateKeyError(err) {
-  return err && (err.code === 11000 || (Array.isArray(err.writeErrors) && err.writeErrors.some((e) => e.code === 11000)));
+  return (
+    err &&
+    (err.code === 11000 ||
+      (Array.isArray(err.writeErrors) && err.writeErrors.some((e) => e.code === 11000)))
+  );
 }
 
 function conflictError(conflicts = []) {
@@ -72,7 +76,11 @@ async function reserveNights(listingId, bookingId, checkIn, checkOut) {
     // Undo any nights this request managed to insert before the failure.
     await BookedNight.deleteMany({ bookingId });
     if (isDuplicateKeyError(err)) {
-      const conflicts = await availabilityService.findOverlappingBookings(listingId, checkIn, checkOut);
+      const conflicts = await availabilityService.findOverlappingBookings(
+        listingId,
+        checkIn,
+        checkOut
+      );
       throw conflictError(conflicts);
     }
     throw err;
@@ -87,11 +95,26 @@ async function createBooking(input) {
   const { listingId, guestName, guestEmail, numberOfGuests, checkIn, checkOut, nights } = input;
 
   const listing = await listingService.getListingById(listingId, 'listingId');
+  // Reject corrupt legacy/imported rates before claiming any nights.
+  if (
+    !Number.isFinite(listing.pricePerNight) ||
+    listing.pricePerNight < 1 ||
+    !Number.isSafeInteger(Math.round(listing.pricePerNight * nights * 100))
+  ) {
+    throw new ApiError(
+      409,
+      'INVALID_LISTING_PRICE',
+      'This listing has an invalid price. Please choose another stay.'
+    );
+  }
 
   if (numberOfGuests > listing.maxGuests) {
-    throw new ApiError(400, 'GUEST_CAPACITY_EXCEEDED', `This listing allows at most ${listing.maxGuests} guests`, [
-      { field: 'numberOfGuests', message: `numberOfGuests cannot exceed ${listing.maxGuests}` },
-    ]);
+    throw new ApiError(
+      400,
+      'GUEST_CAPACITY_EXCEEDED',
+      `This listing allows at most ${listing.maxGuests} guests`,
+      [{ field: 'numberOfGuests', message: `numberOfGuests cannot exceed ${listing.maxGuests}` }]
+    );
   }
 
   // Fast, readable check first: most conflicts are caught here.
@@ -165,4 +188,29 @@ async function updateBookingStatus(id, newStatus) {
   return formatBooking(updated, listing);
 }
 
-module.exports = { createBooking, getBookingById, updateBookingStatus, formatBooking };
+async function listBookings({ status, page, limit, skip }) {
+  const filter = status ? { bookingStatus: status } : {};
+  const [bookings, total] = await Promise.all([
+    Booking.find(filter).sort({ createdAt: -1, _id: -1 }).skip(skip).limit(limit).lean(),
+    Booking.countDocuments(filter),
+  ]);
+  const listings = await Promise.all(
+    [...new Set(bookings.map((b) => String(b.listingId)))].map(async (id) => [
+      id,
+      await listingService.getListingById(id).catch(() => null),
+    ])
+  );
+  const byId = new Map(listings);
+  return {
+    items: bookings.map((b) => formatBooking(b, byId.get(String(b.listingId)))),
+    meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+  };
+}
+
+module.exports = {
+  createBooking,
+  getBookingById,
+  updateBookingStatus,
+  formatBooking,
+  listBookings,
+};

@@ -15,6 +15,7 @@ import { downloadItinerary } from "./itinerary.js";
 import { createApi } from "./api.js";
 import { mountDiscovery } from "./discovery.js";
 import { hostPage } from "./host.js";
+import { managementPage } from "./management.js";
 import { photoAttributes } from "./photos.js";
 import {
   today,
@@ -30,6 +31,21 @@ let routeVersion = 0;
 let pendingSection;
 let disposeDiscovery;
 let searchController;
+let clearSearchOnHome = false;
+function clearSavedSearch() {
+  try {
+    sessionStorage.removeItem("stay-search");
+    sessionStorage.removeItem("stay-results");
+  } catch {}
+}
+// A homepage reload starts a new search; detail/booking reloads retain their URL.
+if (
+  performance.getEntriesByType("navigation")[0]?.type === "reload" &&
+  ["", "/"].includes(location.hash.slice(1).split("?")[0])
+) {
+  clearSavedSearch();
+  history.replaceState(null, "", "#/");
+}
 const price = (value) =>
   Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 });
 // The API has no currency field. Show its numeric prices without inventing a currency.
@@ -85,7 +101,7 @@ function home() {
   <form id="search" class="search-bar" aria-label="Search accommodations"><input type="hidden" name="city" value="${e(filters.get("city") || "")}"><datalist id="destination-suggestions"></datalist>${input("Where to?", "location", "search", `list="destination-suggestions" autocomplete="off" maxlength="100" placeholder="Anywhere: city, region, country" value="${e(filters.get("location") || "")}"`)}${input("Check-in", "checkIn", "date", `min="${today()}" value="${e(filters.get("checkIn") || "")}"`)}${input("Check-out", "checkOut", "date", `min="${today()}" value="${e(filters.get("checkOut") || "")}"`)}${input("Who’s coming?", "guests", "number", `min="1" max="20" placeholder="Add guests" value="${e(filters.get("guests") || "")}"`)}<button class="primary" type="submit">${icon("search")} Search stays</button></form>
   <section class="journey-strip content-width" aria-label="Plan your stay"><div>${icon("search")}<span><strong>Find your kind of place</strong><small>Search by destination, dates, and comforts.</small></span></div><div>${icon("heart")}<span><strong>Keep the ones you love</strong><small>Save favourites and compare the details.</small></span></div><div>${icon("calendar")}<span><strong>Make it a date</strong><small>Check availability and request your stay.</small></span></div></section><section id="getaways" class="destinations content-width"><div class="section-heading"><div><span class="eyebrow">A LITTLE INSPIRATION FOR YOUR NEXT TRIP</span><h2>Explore destinations</h2></div><p>Real places from the current listing inventory.</p></div><div class="discovery-controls"><p id="inventory-summary" role="status">Loading places from the API...</p><button type="button" class="secondary" id="refresh-inventory">Refresh places</button></div><div class="destination-grid" id="destination-inventory"><p>Discovering destinations...</p></div><button class="secondary more-destinations" id="more-destinations" type="button" hidden>Explore all destinations</button></section>
   <section id="stays" class="collection"><div class="section-heading"><div><span class="eyebrow">A PLACE FOR EVERY KIND OF TRAVELLER</span><h2>Find a place to call your own.</h2></div><p>Your dates. Your people. Your perfect escape.</p></div><div class="category-row" role="group" aria-label="Property type"><button type="button" data-type="" class="category">${icon("grid")} <span>All stays</span></button></div>
-  <form id="filters" class="filters" aria-label="Filter accommodations"><label>Country<select name="country" aria-label="Country"><option value="">All countries</option>${filters.get("country") ? `<option selected>${e(filters.get("country"))}</option>` : ""}</select></label>${input("Min. nightly price", "minPrice", "number", `min="0" placeholder="Any" value="${e(filters.get("minPrice") || "")}"`)}${input("Max. nightly price", "maxPrice", "number", `min="0" placeholder="Any" value="${e(filters.get("maxPrice") || "")}"`)}<label>Sort by<select name="sort"><option value="newest">Newest stays</option><option value="price_asc">Price: low to high</option><option value="price_desc">Price: high to low</option><option value="rating_desc">Top rated</option></select></label><button class="secondary">Apply filters</button><button class="plain" type="button" id="reset">Clear all</button></form><details class="amenity-filters" ${filters.get("amenities") ? "open" : ""}><summary>${icon("compare")} Make room for your must-haves <span id="amenity-count"></span></summary><div class="amenity-options">${(
+  <form id="filters" class="filters" aria-label="Filter accommodations"><label>Country<select name="country" aria-label="Country"><option value="">All countries</option>${filters.get("country") ? `<option selected>${e(filters.get("country"))}</option>` : ""}</select></label>${input("Min. nightly price", "minPrice", "number", `min="0" step="0.01" placeholder="Any" value="${e(filters.get("minPrice") || "")}"`)}${input("Max. nightly price", "maxPrice", "number", `min="0" step="0.01" placeholder="Any" value="${e(filters.get("maxPrice") || "")}"`)}<label>Sort by<select name="sort"><option value="newest">Newest stays</option><option value="price_asc">Price: low to high</option><option value="price_desc">Price: high to low</option><option value="rating_desc">Top rated</option></select></label><button class="secondary">Apply filters</button><button class="plain" type="button" id="reset">Clear all</button></form><p id="price-guidance" class="price-note" role="status"></p><details class="amenity-filters" ${filters.get("amenities") ? "open" : ""}><summary>${icon("compare")} Make room for your must-haves <span id="amenity-count"></span></summary><div class="amenity-options">${(
     filters.get("amenities") || ""
   )
     .split(",")
@@ -106,7 +122,32 @@ function home() {
   document.querySelector('[name="sort"]').value =
     filters.get("sort") || "newest";
   let propertyType = filters.get("propertyType") || "";
-  const update = () => {
+  let searchUpdateVersion = 0;
+  let automaticCountry = Boolean(filters.get("city") && filters.get("country"));
+  const homeRoot = document.querySelector("#discovery-page");
+  const update = async (inferCountry = false) => {
+    const updateVersion = ++searchUpdateVersion;
+    if (inferCountry) {
+      const locationInput = homeRoot.querySelector('#search [name="location"]');
+      const submittedLocation = locationInput.value;
+      const destination = await disposeDiscovery.resolveLocation(
+        locationInput.value,
+        homeRoot.querySelector('[name="country"]').value,
+      );
+      if (
+        !homeRoot.isConnected ||
+        updateVersion !== searchUpdateVersion ||
+        locationInput.value !== submittedLocation
+      )
+        return;
+      if (destination && !destination.ambiguous) {
+        locationInput.value = destination.location;
+        homeRoot.querySelector('#search [name="city"]').value =
+          destination.city;
+        homeRoot.querySelector('[name="country"]').value = destination.country;
+        automaticCountry = true;
+      }
+    }
     const values = {
       ...Object.fromEntries(new FormData(document.querySelector("#search"))),
       ...Object.fromEntries(new FormData(document.querySelector("#filters"))),
@@ -145,13 +186,18 @@ function home() {
   for (const form of document.querySelectorAll("#search, #filters"))
     form.onsubmit = (event) => {
       event.preventDefault();
-      update();
+      update(form.id === "search");
     };
   document.querySelector('#search [name="location"]').oninput = () => {
+    searchUpdateVersion++;
     document.querySelector('#search [name="city"]').value = "";
+    if (automaticCountry) document.querySelector('[name="country"]').value = "";
+    automaticCountry = false;
   };
   document.querySelector('[name="country"]').onchange = () => {
+    document.querySelector('#search [name="location"]').value = "";
     document.querySelector('#search [name="city"]').value = "";
+    automaticCountry = false;
     update();
   };
   disposeDiscovery = mountDiscovery({
@@ -168,6 +214,7 @@ function home() {
         destination.city;
       document.querySelector('#search [name="city"]').value = destination.city;
       document.querySelector('[name="country"]').value = destination.country;
+      automaticCountry = true;
       update();
     },
   });
@@ -194,10 +241,13 @@ async function loadResults(filters, page) {
       `<div class="results-heading"><p><strong>${meta.total}</strong> ${meta.total === 1 ? "place" : "places"} to make yourself at home</p><span>Thoughtful spaces. Memorable stays.</span></div>` +
       (data.length
         ? `<div class="grid">${data.map(stayCard).join("")}</div><div class="pagination"><button class="secondary" id="prev" ${page <= 1 ? "disabled" : ""}>← Previous</button><span>Page ${meta.page} of ${meta.totalPages}</span><button class="secondary" id="next" ${page >= meta.totalPages ? "disabled" : ""}>Next →</button></div><p class="price-note">Prices are shown as supplied by the property. Currency is not specified by the booking service.</p>`
-        : '<div class="empty"><span>⌂</span><h3>No stays found. A fresh start?</h3><p>Try another destination, wider dates, or fewer filters.</p><button class="secondary" id="empty-reset">Clear filters</button></div>');
+        : `<div class="empty"><h3>No stays found. A fresh start?</h3><p>No available stays match all your selected filters. Try another destination, wider dates, or fewer filters.</p>${filters.minPrice || filters.maxPrice ? '<button class="secondary" id="empty-price-reset">Remove price limits</button>' : ""}<button class="secondary" id="empty-reset">Clear filters</button></div>`);
     syncSelections();
     const chosen = Object.entries(filters).filter(
-      ([key, value]) => value && !["page", "limit", "sort"].includes(key),
+      ([key, value]) =>
+        value &&
+        !["page", "limit", "sort"].includes(key) &&
+        !(key === "city" && value === filters.location),
     );
     const chips = document.querySelector("#active-filters");
     if (chips)
@@ -207,6 +257,15 @@ async function loadResults(filters, page) {
             `<span>${e(key === "propertyType" ? value : key === "guests" ? value + " guests" : key === "amenities" ? value.replaceAll(",", " + ") : key === "minPrice" ? "From " + value : key === "maxPrice" ? "Up to " + value : value)}</span>`,
         )
         .join("");
+    document
+      .querySelector("#empty-price-reset")
+      ?.addEventListener("click", () => {
+        const form = document.querySelector("#filters");
+        form.elements.minPrice.value = "";
+        form.elements.maxPrice.value = "";
+        form.dispatchEvent(new Event("input", { bubbles: true }));
+        form.requestSubmit();
+      });
     const count = document.querySelector("#amenity-count");
     if (count)
       count.textContent = filters.amenities
@@ -216,6 +275,9 @@ async function loadResults(filters, page) {
       const params = new URLSearchParams(location.hash.split("?")[1]);
       params.set("page", p);
       history.replaceState(null, "", `#/?${params}`);
+      try {
+        sessionStorage.setItem("stay-results", location.hash);
+      } catch {}
       loadResults(filters, p);
       document.querySelector("#stays").scrollIntoView();
     };
@@ -384,6 +446,11 @@ async function listing(id, version) {
         checkInDate: v.checkIn,
         checkOutDate: v.checkOut,
       });
+      clearSavedSearch();
+      clearSearchOnHome = true;
+      try {
+        sessionStorage.setItem("stay-search-completed", "1");
+      } catch {}
       if (version === routeVersion) location.hash = `/booking/${data._id}`;
     } catch (err) {
       if (version !== routeVersion) return;
@@ -421,7 +488,17 @@ function lookup() {
 async function booking(id, version) {
   const { data: b } = await api.booking(id);
   if (version !== routeVersion) return;
-  main.innerHTML = `<section class="confirmation"><div class="confirmation-icon">${b.bookingStatus === "Cancelled" ? "−" : "✓"}</div><span class="eyebrow">${b.bookingStatus === "Cancelled" ? "BOOKING CANCELLED" : "YOUR REQUEST IS SAVED"}</span><h1>${b.bookingStatus === "Cancelled" ? "Until next time." : "A good stay starts here."}</h1><p>${b.bookingStatus === "Pending" ? "Your booking is pending confirmation. No payment has been collected." : b.bookingStatus === "Confirmed" ? "Your booking has been confirmed." : "These dates have been released."}</p><div class="confirmation-card">${img(b.listing?.imageUrls?.[0], b.listing?.title || "Your stay")}<div><span class="status">${e(b.bookingStatus)}</span><h2>${e(b.listing?.title || "Your stay")}</h2><p>${e(b.listing?.city)}, ${e(b.listing?.country)}</p><dl><div><dt>Check-in</dt><dd>${date(b.checkInDate)}</dd></div><div><dt>Check-out</dt><dd>${date(b.checkOutDate)}</dd></div><div><dt>Guests</dt><dd>${e(b.numberOfGuests)}</dd></div><div><dt>Total · ${e(b.numberOfNights)} nights</dt><dd>${price(b.totalPrice)}</dd></div></dl><p>Guest: ${e(b.guestName)} · ${e(b.guestEmail)}</p><label>Save your booking reference<input readonly aria-label="Booking reference" value="${e(b._id)}"></label><p class="small">Save this page’s URL or reference to revisit your booking.</p></div></div><div id="cancel-error"></div><div class="itinerary-tools"><button class="secondary" id="copy-reference" type="button">Copy reference</button><button class="secondary" id="print-booking" type="button">Print itinerary</button>${b.bookingStatus !== "Cancelled" ? '<button class="secondary" id="calendar-download" type="button">Add to calendar</button>' : ""}</div><div class="confirmation-actions"><a class="primary" href="#/">Explore more stays ↗</a>${b.bookingStatus !== "Cancelled" ? '<button class="plain" id="cancel">Cancel this booking</button>' : ""}</div><dialog id="cancel-dialog"><h2>Cancel your stay?</h2><p>Your reserved dates will be released.</p><div class="confirmation-actions"><button class="secondary" id="keep">Keep booking</button><button class="primary" id="confirm-cancel">Yes, cancel booking</button></div></dialog></section>`;
+  main.innerHTML = `<section class="confirmation"><div class="confirmation-icon">${b.bookingStatus === "Cancelled" ? "−" : "✓"}</div><span class="eyebrow">${b.bookingStatus === "Cancelled" ? "BOOKING CANCELLED" : "YOUR REQUEST IS SAVED"}</span><h1>${b.bookingStatus === "Cancelled" ? "Until next time." : "A good stay starts here."}</h1><p>${b.bookingStatus === "Pending" ? "Your booking is pending confirmation. No payment has been collected." : b.bookingStatus === "Confirmed" ? "Your booking has been confirmed." : "These dates have been released."}</p><div class="confirmation-card">${img(b.listing?.imageUrls?.[0], b.listing?.title || "Your stay")}<div><span class="status">${e(b.bookingStatus)}</span><h2>${e(b.listing?.title || "Your stay")}</h2><p>${e(b.listing?.city)}, ${e(b.listing?.country)}</p><dl><div><dt>Check-in</dt><dd>${date(b.checkInDate)}</dd></div><div><dt>Check-out</dt><dd>${date(b.checkOutDate)}</dd></div><div><dt>Guests</dt><dd>${e(b.numberOfGuests)}</dd></div><div><dt>Total · ${e(b.numberOfNights)} nights</dt><dd>${price(b.totalPrice)}</dd></div></dl><p>Guest: ${e(b.guestName)} · ${e(b.guestEmail)}</p><label>Save your booking reference<input readonly aria-label="Booking reference" value="${e(b._id)}"></label><p class="small">Save this page’s URL or reference to revisit your booking.</p></div></div><div id="cancel-error"></div><div class="itinerary-tools"><button class="secondary" id="refresh-booking" type="button">Refresh booking status</button><button class="secondary" id="copy-reference" type="button">Copy reference</button><button class="secondary" id="print-booking" type="button">Print itinerary</button>${b.bookingStatus !== "Cancelled" ? '<button class="secondary" id="calendar-download" type="button">Add to calendar</button>' : ""}</div><div class="confirmation-actions"><a class="primary" href="#/">Explore more stays ↗</a>${b.bookingStatus !== "Cancelled" ? '<button class="plain" id="cancel">Cancel this booking</button>' : ""}</div><dialog id="cancel-dialog"><h2>Cancel your stay?</h2><p>Your reserved dates will be released.</p><div class="confirmation-actions"><button class="secondary" id="keep">Keep booking</button><button class="primary" id="confirm-cancel">Yes, cancel booking</button></div></dialog></section>`;
+  document.querySelector("#refresh-booking").onclick = async (event) => {
+    event.target.disabled = true;
+    try {
+      await booking(id, version);
+    } catch (error) {
+      if (version === routeVersion)
+        showError(error, document.querySelector("#cancel-error"));
+      event.target.disabled = false;
+    }
+  };
   document.querySelector("#copy-reference").onclick = () =>
     copyText(b._id, "Booking reference copied.");
   document.querySelector("#print-booking").onclick = () => window.print();
@@ -471,12 +548,26 @@ async function route() {
   const [path] = location.hash.slice(1).split("?");
   try {
     if (!path || path === "/") {
+      let completed = clearSearchOnHome;
+      try {
+        completed ||= sessionStorage.getItem("stay-search-completed") === "1";
+      } catch {}
+      if (completed) {
+        clearSavedSearch();
+        history.replaceState(null, "", "#/");
+        clearSearchOnHome = false;
+        try {
+          sessionStorage.removeItem("stay-search-completed");
+        } catch {}
+      }
       home();
       if (pendingSection) {
         document.getElementById(pendingSection)?.scrollIntoView();
         pendingSection = null;
       }
-    } else if (path === "/host")
+    } else if (path === "/manage")
+      managementPage(api, main, () => version === routeVersion);
+    else if (path === "/host")
       hostPage(api, main, () => version === routeVersion);
     else if (path === "/saved" || path === "/compare")
       await collectionPage(
@@ -535,6 +626,11 @@ document.querySelector("nav").addEventListener("click", (event) => {
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") closeMenu();
 });
+document.querySelector(".skip").addEventListener("click", (event) => {
+  event.preventDefault();
+  main.focus({ preventScroll: true });
+  main.scrollIntoView({ block: "start" });
+});
 async function copyText(text, message) {
   try {
     await navigator.clipboard.writeText(text);
@@ -568,6 +664,8 @@ document.addEventListener(
       event.target.dataset.fallback = "true";
       event.target.classList.add("image-unavailable");
       event.target.alt = "Property photo unavailable";
+      event.target.removeAttribute("srcset");
+      event.target.removeAttribute("sizes");
       event.target.src = "/images/property-placeholder.svg";
     }
   },

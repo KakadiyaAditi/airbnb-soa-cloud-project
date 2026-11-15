@@ -4,7 +4,17 @@ Responsive Airbnb-inspired accommodation search and booking interface, compatibl
 
 Features include saved stays, side-by-side comparison, amenity filters, reserved-date calendar, photo viewer, live booking estimates, and printable/calendar itineraries.
 
-The combined project is on `main`, containing both `backend/` and `frontend/`. It was verified on `integration/frontend-backend` before merging into `main`. The original member branches remain unchanged. The backend is restored exactly from Member 1's commit `512b4a8`, including its services, models, validators and tests. All frontend functionality and HD photo assets are retained.
+The latest tested combined project is on `main` and `integration/frontend-backend`, containing both `backend/` and `frontend/`. `feature/member2-frontend` contains the matching frontend only. Member 1's original branch is unchanged; the combined API extends its services with protected booking management while retaining guest booking and cancellation workflows. See the detailed verification record in [backend/docs/TESTING.md](backend/docs/TESTING.md).
+
+## Search and booking management
+
+Typing a recognised city (for example Paris) in the top search and pressing Search stays automatically selects its country (France) in the results filters. City, country and area resolution uses current API inventory, including newly published stays. Choose a `City, Country` suggestion for ambiguous city names. Unknown places show normal search results or an empty state without inventing a country.
+
+New requests are Pending and reserve their nights. Open the footer's **Manage bookings** link (`http://localhost:5173/#/manage`), enter the private backend access code, and accept or decline a request. Accept changes it to Confirmed; decline changes it to Cancelled and releases the nights. Guests can use **Refresh booking status** on their booking page to see the decision. The manager can filter by status, paginate, refresh, and cancel confirmed stays. Cancelled bookings cannot be reconfirmed.
+
+For the temporary demo below, the backend prints a randomly generated management access code in its own terminal. For a persistent backend, set `ADMIN_API_TOKEN` in **backend/.env** to a private random value of at least 32 characters and restart the backend. Generate a value with `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"`. Never commit this value or put it in frontend/VITE variables. The dashboard keeps it in memory only; reload or sign out clears it. An unset or short code disables management with HTTP 503; invalid credentials return 401. Confirmation requires authorization on both the new admin endpoint and the legacy status endpoint.
+
+This is a single-manager academic workflow. Guests still use booking references for lookup/cancellation, and publishing is public. It does not implement authenticated guest/host accounts, per-host permissions, payments/refunds, messaging, verified reviews, email notifications, automatic pending-request expiry, or Instant Book. Use sample guest information in demonstrations; production use requires proper account authorization and operational controls.
 
 ## Run the backend
 
@@ -71,6 +81,10 @@ From `backend/`, `npm.cmd test` runs Member 1's full test suite. It clears the s
 
 The frontend history had intentionally removed `backend/` to keep the member branch frontend-only. This integration explicitly restores that folder from the backend branch after merging the frontend history. Neither member branch nor `main` is overwritten. Account authentication, payments, AWS deployment and cloud-load measurements remain separate project work; sample photography is illustrative.
 
-Verified locally on 15 November 2026: all 111 backend tests passed against a fresh isolated MongoDB database, all 15 frontend unit/API tests passed, all 16 browser tests passed, the production frontend build passed, and all 12 HTTP contract checks passed. The browser suite was run serially after a parallel image-load timing failure on this Windows machine. Application code was not changed to bypass that failure. Source comparisons confirm the backend exactly matches Member 1 and the frontend application, assets, tests and scripts exactly match Member 2.
+At the original merge on 15 November 2026, all 111 backend tests, 15 frontend unit/API tests, 16 browser tests, the production build and 12 HTTP contract checks passed. The browser suite ran serially after a parallel image-load timing failure on this Windows machine. Application code was not changed to bypass that failure. Source comparisons at that merge confirmed both applications matched their member branches.
+
+## Integration bug audit
+
+Follow-up fixes on `integration/frontend-backend` address the skip-link route, stale automatic country filters after changing destinations, losing the current results page when returning from a listing, broken responsive-image fallbacks, removing deleted saved/comparison properties, request timeouts overridden by cancellation signals, and case-insensitive destination/country grouping. Each issue has a regression check. User-selected country filters and temporarily unavailable saved properties are preserved; only explicit 404 results can be removed with the new cleanup control. Backend source and the member branches remain unchanged.
 
 Discovery options are derived from all pages of the listing API, not a fixed destination list. List your space publishes through Member 1's existing API. See the detailed dynamic-discovery checklist and the temporary manual-demo backend command in [frontend/README.md](frontend/README.md).

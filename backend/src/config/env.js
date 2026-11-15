@@ -26,4 +26,5 @@ module.exports = {
   port,
   mongoUri,
   corsOrigins,
+  adminToken: process.env.ADMIN_API_TOKEN || '',
 };

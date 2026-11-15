@@ -1,5 +1,15 @@
 # Backend Testing
 
+## Verification audit — 2026-11-15
+
+Executed against isolated temporary MongoDB on Windows / Node 22.14.0, with physical test files outside OneDrive so reparse points could not hide tests from discovery. All 7 backend suites / 124 tests passed with coverage: 95.92% statements, 89.76% branches, 93.90% functions and 96.61% lines. Coverage excludes the server entry point as configured in package.json.
+
+Additional checks passed: 22 frontend unit tests, 29 Chromium browser tests including automated accessibility checks and mobile layouts, frontend formatting and build. Twelve HTTP contract checks passed against both the integrated API and Member 1's unchanged commit 512b4a8. Real MongoDB + browser checks passed on both for publishing, discovery, search, booking, persistence, overlap conflicts, cancellation, released nights and concurrent requests; manager authorization/acceptance/decline passed on the integrated API. The original member branch has no manager endpoints. The backend production-dependency audit reported zero known vulnerabilities at audit time.
+
+New regressions prevent stale destination inference overwriting newer input, decimal filters being rejected by the browser, accumulated calendar listeners, non-finite listing price/room values being stored and serialized as null, and unsafe booking totals from legacy/imported rates. Numeric tests assert rejected requests create neither bookings nor reserved nights. Existing concurrency coverage includes 15 simultaneous identical requests, partially overlapping and non-overlapping stays, and conflicting status transitions.
+
+These checks use disposable databases, not the running demo or normal project database. They establish tested behaviour, not an absence of every possible defect or a production load/security certification. Guest/host account authorization, payment processing and pending-request expiry remain unimplemented as documented.
+
 ## How to run
 
 MongoDB must be running locally. Tests use a **separate** database (`MONGODB_URI_TEST`, default
