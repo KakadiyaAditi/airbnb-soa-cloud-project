@@ -76,3 +76,16 @@ Never commit `.env`.
 | `EADDRINUSE :5000` | Another process uses the port; change `PORT` in `.env` |
 | Browser shows CORS error / API returns 403 `CORS_FORBIDDEN` | Add your frontend URL to `CORS_ORIGIN` and restart |
 | Tests fail with "Missing required sub-document 'driver'" | Run tests with `npm test` (it adds `--experimental-vm-modules`), not bare `npx jest` |
+
+## Protected booking management (integration branch)
+
+Configure a private ADMIN_API_TOKEN of at least 32 characters in backend/.env and restart the server. Never commit a real token or expose it through VITE variables. Missing/short configuration disables these routes (503); missing or incorrect Bearer credentials return 401.
+
+- GET /api/admin/bookings?status=Pending&page=1&limit=10: protected paginated list. Optional status: Pending, Confirmed or Cancelled; omit to list all.
+- PATCH /api/admin/bookings/:id/status: protected, JSON bookingStatus Confirmed or Cancelled. Same validation and transition rules as the existing service.
+- PATCH /api/bookings/:id/status: confirmation now also requires the manager Bearer token. Guest cancellation remains reference-based for compatibility.
+- Send Authorization: Bearer <private-token>. CORS accepts the Authorization header.
+
+Pending requests reserve nights immediately. Accepting changes Pending to Confirmed. Declining/cancelling changes Pending/Confirmed to Cancelled and releases nights. Atomic status conditions prevent conflicting transitions. Cancelled is terminal. No automatic expiry or payments occur.
+
+The frontend exposes this workflow at /#/manage. This is a single-manager implementation; guest accounts, per-host ownership and authorization, notification delivery, payments and pending-expiry scheduling remain outside its scope. Public publishing and reference-based guest lookup/cancellation must be replaced with account authorization before real guest data is used.

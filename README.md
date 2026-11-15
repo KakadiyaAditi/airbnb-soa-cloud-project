@@ -4,7 +4,17 @@ Responsive Airbnb-inspired accommodation search and booking interface, compatibl
 
 Features include saved stays, side-by-side comparison, amenity filters, reserved-date calendar, photo viewer, live booking estimates, and printable/calendar itineraries.
 
-The combined project is on `main`, containing both `backend/` and `frontend/`. It was verified on `integration/frontend-backend` before merging into `main`. The original member branches remain unchanged. The backend is restored exactly from Member 1's commit `512b4a8`, including its services, models, validators and tests. All frontend functionality and HD photo assets are retained.
+The latest combined project is on `integration/frontend-backend`, containing both `backend/` and `frontend/`. `feature/member2-frontend` contains the matching frontend only. `main` retains the previous merged version. Member 1's original branch is unchanged; this integration branch extends its API with protected booking management while retaining guest booking and cancellation workflows.
+
+## Search and booking management
+
+Typing a recognised city (for example Paris) in the top search and pressing Search stays automatically selects its country (France) in the results filters. City, country and area resolution uses current API inventory, including newly published stays. Choose a `City, Country` suggestion for ambiguous city names. Unknown places show normal search results or an empty state without inventing a country.
+
+New requests are Pending and reserve their nights. Open the footer's **Manage bookings** link (`http://localhost:5173/#/manage`), enter the private backend access code, and accept or decline a request. Accept changes it to Confirmed; decline changes it to Cancelled and releases the nights. Guests can use **Refresh booking status** on their booking page to see the decision. The manager can filter by status, paginate, refresh, and cancel confirmed stays. Cancelled bookings cannot be reconfirmed.
+
+For the temporary demo below, the backend prints a randomly generated management access code in its own terminal. For a persistent backend, set `ADMIN_API_TOKEN` in **backend/.env** to a private random value of at least 32 characters and restart the backend. Generate a value with `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"`. Never commit this value or put it in frontend/VITE variables. The dashboard keeps it in memory only; reload or sign out clears it. An unset or short code disables management with HTTP 503; invalid credentials return 401. Confirmation requires authorization on both the new admin endpoint and the legacy status endpoint.
+
+This is a single-manager academic workflow. Guests still use booking references for lookup/cancellation, and publishing is public. It does not implement authenticated guest/host accounts, per-host permissions, payments/refunds, messaging, verified reviews, email notifications, automatic pending-request expiry, or Instant Book. Use sample guest information in demonstrations; production use requires proper account authorization and operational controls.
 
 ## Run the backend
 

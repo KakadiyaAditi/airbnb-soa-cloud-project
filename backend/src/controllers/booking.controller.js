@@ -1,6 +1,19 @@
 const bookingService = require('../services/booking/booking.service');
 const { validateCreateBooking, validateStatusUpdate } = require('../validators/booking.validator');
 const { sendSuccess } = require('../utils/response');
+const { getPagination } = require('../utils/pagination');
+const ApiError = require('../utils/ApiError');
+
+async function listBookings(req, res) {
+  const status = req.query.status;
+  if (status !== undefined && !['Pending', 'Confirmed', 'Cancelled'].includes(status))
+    throw ApiError.badRequest('Invalid booking status filter');
+  const { items, meta } = await bookingService.listBookings({
+    status,
+    ...getPagination(req.query),
+  });
+  sendSuccess(res, items, { meta });
+}
 
 async function createBooking(req, res) {
   const input = validateCreateBooking(req.body);
@@ -19,4 +32,4 @@ async function updateBookingStatus(req, res) {
   sendSuccess(res, booking);
 }
 
-module.exports = { createBooking, getBookingById, updateBookingStatus };
+module.exports = { createBooking, getBookingById, updateBookingStatus, listBookings };

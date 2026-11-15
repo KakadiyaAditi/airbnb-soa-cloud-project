@@ -76,8 +76,8 @@ test("typing a new destination clears the previous destination automatic country
   await page.getByRole("button", { name: "Search stays" }).click();
   const query = new URLSearchParams(new URL(page.url()).hash.split("?")[1]);
   expect(query.get("location")).toBe("Paris");
-  expect(query.has("country")).toBe(false);
-  expect(query.has("city")).toBe(false);
+  expect(query.get("country")).toBe("France");
+  expect(query.get("city")).toBe("Paris");
 });
 
 test("back to results returns to the same paginated result page", async ({

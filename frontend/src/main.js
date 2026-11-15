@@ -15,6 +15,7 @@ import { downloadItinerary } from "./itinerary.js";
 import { createApi } from "./api.js";
 import { mountDiscovery } from "./discovery.js";
 import { hostPage } from "./host.js";
+import { managementPage } from "./management.js";
 import { photoAttributes } from "./photos.js";
 import {
   today,
@@ -107,7 +108,23 @@ function home() {
     filters.get("sort") || "newest";
   let propertyType = filters.get("propertyType") || "";
   let automaticCountry = Boolean(filters.get("city") && filters.get("country"));
-  const update = () => {
+  const homeRoot = document.querySelector("#discovery-page");
+  const update = async (inferCountry = false) => {
+    if (inferCountry) {
+      const locationInput = homeRoot.querySelector('#search [name="location"]');
+      const destination = await disposeDiscovery.resolveLocation(
+        locationInput.value,
+        homeRoot.querySelector('[name="country"]').value,
+      );
+      if (!homeRoot.isConnected) return;
+      if (destination && !destination.ambiguous) {
+        locationInput.value = destination.location;
+        homeRoot.querySelector('#search [name="city"]').value =
+          destination.city;
+        homeRoot.querySelector('[name="country"]').value = destination.country;
+        automaticCountry = true;
+      }
+    }
     const values = {
       ...Object.fromEntries(new FormData(document.querySelector("#search"))),
       ...Object.fromEntries(new FormData(document.querySelector("#filters"))),
@@ -146,7 +163,7 @@ function home() {
   for (const form of document.querySelectorAll("#search, #filters"))
     form.onsubmit = (event) => {
       event.preventDefault();
-      update();
+      update(form.id === "search");
     };
   document.querySelector('#search [name="location"]').oninput = () => {
     document.querySelector('#search [name="city"]').value = "";
@@ -429,7 +446,17 @@ function lookup() {
 async function booking(id, version) {
   const { data: b } = await api.booking(id);
   if (version !== routeVersion) return;
-  main.innerHTML = `<section class="confirmation"><div class="confirmation-icon">${b.bookingStatus === "Cancelled" ? "−" : "✓"}</div><span class="eyebrow">${b.bookingStatus === "Cancelled" ? "BOOKING CANCELLED" : "YOUR REQUEST IS SAVED"}</span><h1>${b.bookingStatus === "Cancelled" ? "Until next time." : "A good stay starts here."}</h1><p>${b.bookingStatus === "Pending" ? "Your booking is pending confirmation. No payment has been collected." : b.bookingStatus === "Confirmed" ? "Your booking has been confirmed." : "These dates have been released."}</p><div class="confirmation-card">${img(b.listing?.imageUrls?.[0], b.listing?.title || "Your stay")}<div><span class="status">${e(b.bookingStatus)}</span><h2>${e(b.listing?.title || "Your stay")}</h2><p>${e(b.listing?.city)}, ${e(b.listing?.country)}</p><dl><div><dt>Check-in</dt><dd>${date(b.checkInDate)}</dd></div><div><dt>Check-out</dt><dd>${date(b.checkOutDate)}</dd></div><div><dt>Guests</dt><dd>${e(b.numberOfGuests)}</dd></div><div><dt>Total · ${e(b.numberOfNights)} nights</dt><dd>${price(b.totalPrice)}</dd></div></dl><p>Guest: ${e(b.guestName)} · ${e(b.guestEmail)}</p><label>Save your booking reference<input readonly aria-label="Booking reference" value="${e(b._id)}"></label><p class="small">Save this page’s URL or reference to revisit your booking.</p></div></div><div id="cancel-error"></div><div class="itinerary-tools"><button class="secondary" id="copy-reference" type="button">Copy reference</button><button class="secondary" id="print-booking" type="button">Print itinerary</button>${b.bookingStatus !== "Cancelled" ? '<button class="secondary" id="calendar-download" type="button">Add to calendar</button>' : ""}</div><div class="confirmation-actions"><a class="primary" href="#/">Explore more stays ↗</a>${b.bookingStatus !== "Cancelled" ? '<button class="plain" id="cancel">Cancel this booking</button>' : ""}</div><dialog id="cancel-dialog"><h2>Cancel your stay?</h2><p>Your reserved dates will be released.</p><div class="confirmation-actions"><button class="secondary" id="keep">Keep booking</button><button class="primary" id="confirm-cancel">Yes, cancel booking</button></div></dialog></section>`;
+  main.innerHTML = `<section class="confirmation"><div class="confirmation-icon">${b.bookingStatus === "Cancelled" ? "−" : "✓"}</div><span class="eyebrow">${b.bookingStatus === "Cancelled" ? "BOOKING CANCELLED" : "YOUR REQUEST IS SAVED"}</span><h1>${b.bookingStatus === "Cancelled" ? "Until next time." : "A good stay starts here."}</h1><p>${b.bookingStatus === "Pending" ? "Your booking is pending confirmation. No payment has been collected." : b.bookingStatus === "Confirmed" ? "Your booking has been confirmed." : "These dates have been released."}</p><div class="confirmation-card">${img(b.listing?.imageUrls?.[0], b.listing?.title || "Your stay")}<div><span class="status">${e(b.bookingStatus)}</span><h2>${e(b.listing?.title || "Your stay")}</h2><p>${e(b.listing?.city)}, ${e(b.listing?.country)}</p><dl><div><dt>Check-in</dt><dd>${date(b.checkInDate)}</dd></div><div><dt>Check-out</dt><dd>${date(b.checkOutDate)}</dd></div><div><dt>Guests</dt><dd>${e(b.numberOfGuests)}</dd></div><div><dt>Total · ${e(b.numberOfNights)} nights</dt><dd>${price(b.totalPrice)}</dd></div></dl><p>Guest: ${e(b.guestName)} · ${e(b.guestEmail)}</p><label>Save your booking reference<input readonly aria-label="Booking reference" value="${e(b._id)}"></label><p class="small">Save this page’s URL or reference to revisit your booking.</p></div></div><div id="cancel-error"></div><div class="itinerary-tools"><button class="secondary" id="refresh-booking" type="button">Refresh booking status</button><button class="secondary" id="copy-reference" type="button">Copy reference</button><button class="secondary" id="print-booking" type="button">Print itinerary</button>${b.bookingStatus !== "Cancelled" ? '<button class="secondary" id="calendar-download" type="button">Add to calendar</button>' : ""}</div><div class="confirmation-actions"><a class="primary" href="#/">Explore more stays ↗</a>${b.bookingStatus !== "Cancelled" ? '<button class="plain" id="cancel">Cancel this booking</button>' : ""}</div><dialog id="cancel-dialog"><h2>Cancel your stay?</h2><p>Your reserved dates will be released.</p><div class="confirmation-actions"><button class="secondary" id="keep">Keep booking</button><button class="primary" id="confirm-cancel">Yes, cancel booking</button></div></dialog></section>`;
+  document.querySelector("#refresh-booking").onclick = async (event) => {
+    event.target.disabled = true;
+    try {
+      await booking(id, version);
+    } catch (error) {
+      if (version === routeVersion)
+        showError(error, document.querySelector("#cancel-error"));
+      event.target.disabled = false;
+    }
+  };
   document.querySelector("#copy-reference").onclick = () =>
     copyText(b._id, "Booking reference copied.");
   document.querySelector("#print-booking").onclick = () => window.print();
@@ -484,7 +511,9 @@ async function route() {
         document.getElementById(pendingSection)?.scrollIntoView();
         pendingSection = null;
       }
-    } else if (path === "/host")
+    } else if (path === "/manage")
+      managementPage(api, main, () => version === routeVersion);
+    else if (path === "/host")
       hostPage(api, main, () => version === routeVersion);
     else if (path === "/saved" || path === "/compare")
       await collectionPage(

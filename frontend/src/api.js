@@ -55,6 +55,16 @@ export function createApi(
       Object.entries(params).filter(([, v]) => v !== "" && v != null),
     ).toString();
   return {
+    managerBookings: (token, status = "Pending", page = 1) =>
+      request(`/api/admin/bookings?${query({ status, page, limit: 10 })}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      }),
+    managerStatus: (token, id, bookingStatus) =>
+      request(`/api/admin/bookings/${encodeURIComponent(id)}/status`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ bookingStatus }),
+      }),
     listings: (page = 1, limit = 50, signal) =>
       request(`/api/listings?${query({ page, limit })}`, { signal }),
     createListing: (listing) =>

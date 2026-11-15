@@ -481,6 +481,10 @@ Returns the booking object above. **Errors:** `400 INVALID_ID`, `404 NOT_FOUND`.
 
 ### `PATCH /api/bookings/:id/status`
 
+**Integration branch authorization update:** confirmation (`bookingStatus: Confirmed`) requires `Authorization: Bearer <ADMIN_API_TOKEN>`. Guest cancellation remains reference-based. Missing/invalid credentials return 401; missing or shorter-than-32-character backend configuration returns 503. Never put the token in frontend environment variables.
+
+The same integration branch adds protected `GET /api/admin/bookings` (optional `status=Pending|Confirmed|Cancelled`, `page`, `limit`; standard data/meta envelope) and `PATCH /api/admin/bookings/:id/status` (same JSON and transitions below). Both always require the private Bearer token. The frontend management page is `/#/manage`.
+
 Confirms or cancels a booking.
 
 ```json

@@ -214,7 +214,7 @@ describe('Booking Service - PATCH /api/bookings/:id/status', () => {
   });
 
   const setStatus = (status, id = bookingId) =>
-    request(app).patch(`/api/bookings/${id}/status`).send({ bookingStatus: status });
+    request(app).patch(`/api/bookings/${id}/status`).set('Authorization', `Bearer ${process.env.ADMIN_API_TOKEN}`).send({ bookingStatus: status });
 
   test('Pending -> Confirmed -> Cancelled', async () => {
     const confirmed = await setStatus('Confirmed');
