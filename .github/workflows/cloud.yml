@@ -2,9 +2,9 @@ name: Option B validation
 on:
   push:
     branches: [main, integration/frontend-backend]
-    paths: [infra/**, scripts/**, performance/**, compose.yaml, backend/**, frontend/**, .github/workflows/cloud.yml]
+    paths: [infra/**, scripts/**, performance/**, docker-compose.yml, backend/**, frontend/**, .github/workflows/cloud.yml]
   pull_request:
-    paths: [infra/**, scripts/**, performance/**, compose.yaml, backend/**, frontend/**, .github/workflows/cloud.yml]
+    paths: [infra/**, scripts/**, performance/**, docker-compose.yml, backend/**, frontend/**, .github/workflows/cloud.yml]
 permissions:
   contents: read
 jobs:

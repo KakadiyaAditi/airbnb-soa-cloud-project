@@ -13,7 +13,7 @@ $resultPath = Join-Path $PSScriptRoot ('results/' + (Get-Date).ToUniversalTime()
 New-Item -ItemType Directory -Path $resultPath -Force | Out-Null
 $stopFile = Join-Path $resultPath 'collection.stop'
 $cpuPath = Join-Path $resultPath 'docker-cpu.ndjson'
-$containerIds = @(& docker compose -p airbnb-loadtest -f (Join-Path $repoRoot 'compose.yaml') -f (Join-Path $PSScriptRoot 'compose.load.yaml') ps -q)
+$containerIds = @(& docker compose -p airbnb-loadtest -f (Join-Path $repoRoot 'docker-compose.yml') -f (Join-Path $PSScriptRoot 'compose.load.yaml') ps -q)
 $collector = $null
 if ($containerIds.Count -gt 0 -and $BaseUrl -match ':8081$') { $collector = Start-Job -ArgumentList $containerIds,$stopFile,$cpuPath -ScriptBlock {
   param($ids,$stop,$output)

@@ -47,7 +47,7 @@ Frontend retries reuse the identical key and body, with bounded exponential back
 Set-Location backend
 npm.cmd run test:isolated -- --coverage
 # Docker dedicated load stack only:
-docker compose -p airbnb-loadtest -f ../compose.yaml -f ../performance/compose.load.yaml exec backend node scripts/check-multiple-instances.cjs
+docker compose -p airbnb-loadtest -f ../docker-compose.yml -f ../performance/compose.load.yaml exec backend node scripts/check-multiple-instances.cjs
 ```
 
 Automated coverage includes 15 concurrent distinct requests for identical dates; partial overlaps; adjacent stays; ten simultaneous identical keys; payload mismatch; original replay after cancellation; injected insert failure; injected night-release failure; repeat-safe cancellation; second-client isolation from uncommitted locks; and independent application instances. The dedicated process probe starts **two real Node processes**, sends 20 competing requests, replays through the other process, terminates the creator and cancels through the survivor. It does not pretend these local processes are AWS instances.
