@@ -1,0 +1,7 @@
+phase,requests,observed_window_seconds,requests_per_second,average_ms,median_ms,p95_ms,p99_ms,failed_requests,error_rate,expected_booking_conflicts,dropped_iterations,aws_cpu_utilization,aws_running_instances
+normal,177,29.609,5.978,14.451,11.831,29.22,35.657,0,0.0,0,0,NOT_MEASURED,NOT_MEASURED
+weekend,328,29.713,11.039,15.753,13.62,31.263,40.028,0,0.0,0,0,NOT_MEASURED,NOT_MEASURED
+holiday,660,29.957,22.032,14.884,12.862,27.526,38.077,0,0.0,0,0,NOT_MEASURED,NOT_MEASURED
+extreme,1320,30.045,43.934,15.575,12.893,30.247,39.197,0,0.0,0,0,NOT_MEASURED,NOT_MEASURED
+recovery,389,29.989,12.972,16.426,14.076,32.312,44.184,0,0.0,0,0,NOT_MEASURED,NOT_MEASURED
+setup_or_teardown,1,0.011,94.354,10.598,10.598,10.598,10.598,0,0.0,0,0,NOT_MEASURED,NOT_MEASURED

@@ -1,0 +1,7 @@
+# Use a separate project name and WEB_PORT=8081; never switches the normal demo DB.
+services:
+  backend:
+    environment:
+      MONGODB_URI: mongodb://mongo:27017/airbnb_soa_loadtest?replicaSet=rs0
+      LOAD_TEST_DATA_ENABLED: 'true'
+      METRICS_ENVIRONMENT: local-loadtest

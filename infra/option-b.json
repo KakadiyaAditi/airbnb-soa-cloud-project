@@ -1,0 +1,594 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "IT457 Option B: existing modular Node API, Docker, ALB, EC2 ASG, shared external MongoDB. Chargeable; deploy only after approval.",
+  "Parameters": {
+    "VpcId": {
+      "Type": "AWS::EC2::VPC::Id"
+    },
+    "PublicSubnets": {
+      "Type": "List<AWS::EC2::Subnet::Id>",
+      "Description": "At least two ALB subnets in different AZs"
+    },
+    "ApplicationSubnets": {
+      "Type": "List<AWS::EC2::Subnet::Id>",
+      "Description": "Application subnets with required outbound access"
+    },
+    "AppSecretArn": {
+      "Type": "String",
+      "AllowedPattern": "arn:aws:secretsmanager:.*",
+      "Description": "Existing secret JSON: MONGODB_URI, ADMIN_API_TOKEN, CORS_ORIGIN"
+    },
+    "CertificateArn": {
+      "Type": "String",
+      "AllowedPattern": "arn:aws:acm:.*"
+    },
+    "BackendImage": {
+      "Type": "String",
+      "AllowedPattern": ".+\\.dkr\\.ecr\\..+\\.amazonaws\\.com/.+@sha256:[a-f0-9]{64}"
+    },
+    "FrontendImage": {
+      "Type": "String",
+      "AllowedPattern": ".+\\.dkr\\.ecr\\..+\\.amazonaws\\.com/.+@sha256:[a-f0-9]{64}"
+    },
+    "BackendRepositoryArn": {
+      "Type": "String",
+      "AllowedPattern": "arn:aws:ecr:.*"
+    },
+    "FrontendRepositoryArn": {
+      "Type": "String",
+      "AllowedPattern": "arn:aws:ecr:.*"
+    },
+    "AmiId": {
+      "Type": "AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>",
+      "Default": "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
+    },
+    "InstanceType": {
+      "Type": "String",
+      "Default": "t3.small",
+      "AllowedValues": [
+        "t3.micro",
+        "t3.small",
+        "t3.medium"
+      ]
+    },
+    "MaximumInstances": {
+      "Type": "Number",
+      "Default": 3,
+      "MinValue": 1,
+      "MaxValue": 5
+    },
+    "CpuTarget": {
+      "Type": "Number",
+      "Default": 60,
+      "MinValue": 20,
+      "MaxValue": 80
+    },
+    "AssignPublicIp": {
+      "Type": "String",
+      "Default": "true",
+      "AllowedValues": [
+        "true",
+        "false"
+      ],
+      "Description": "False requires outbound NAT or suitable VPC endpoints; no SSH ingress is provided"
+    },
+    "EnableLoadTesting": {
+      "Type": "String",
+      "Default": "false",
+      "AllowedValues": [
+        "true",
+        "false"
+      ],
+      "Description": "Enable only on an approved isolated stack whose secret URI database ends _loadtest"
+    }
+  },
+  "Conditions": {
+    "PublicIp": {
+      "Fn::Equals": [
+        {
+          "Ref": "AssignPublicIp"
+        },
+        "true"
+      ]
+    }
+  },
+  "Resources": {
+    "ApplicationLogs": {
+      "Type": "AWS::Logs::LogGroup",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "RetentionInDays": 7
+      }
+    },
+    "AlbSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Public HTTP redirect and HTTPS only",
+        "VpcId": {
+          "Ref": "VpcId"
+        },
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 443,
+            "ToPort": 443,
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 80,
+            "ToPort": 80,
+            "CidrIp": "0.0.0.0/0"
+          }
+        ]
+      }
+    },
+    "AppSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "No SSH; HTTP only from ALB",
+        "VpcId": {
+          "Ref": "VpcId"
+        },
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 8080,
+            "ToPort": 8080,
+            "SourceSecurityGroupId": {
+              "Ref": "AlbSecurityGroup"
+            }
+          }
+        ]
+      }
+    },
+    "InstanceRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ec2.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "ManagedPolicyArns": [
+          "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+        ],
+        "Policies": [
+          {
+            "PolicyName": "ApplicationBootstrap",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": "secretsmanager:GetSecretValue",
+                  "Resource": {
+                    "Ref": "AppSecretArn"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "ecr:GetAuthorizationToken",
+                  "Resource": "*"
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "ecr:BatchGetImage",
+                    "ecr:GetDownloadUrlForLayer",
+                    "ecr:BatchCheckLayerAvailability"
+                  ],
+                  "Resource": [
+                    {
+                      "Ref": "BackendRepositoryArn"
+                    },
+                    {
+                      "Ref": "FrontendRepositoryArn"
+                    }
+                  ]
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents"
+                  ],
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "ApplicationLogs",
+                      "Arn"
+                    ]
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "cloudformation:SignalResource",
+                  "Resource": {
+                    "Ref": "AWS::StackId"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "InstanceProfile": {
+      "Type": "AWS::IAM::InstanceProfile",
+      "Properties": {
+        "Roles": [
+          {
+            "Ref": "InstanceRole"
+          }
+        ]
+      }
+    },
+    "LoadBalancer": {
+      "Type": "AWS::ElasticLoadBalancingV2::LoadBalancer",
+      "Properties": {
+        "Scheme": "internet-facing",
+        "Type": "application",
+        "Subnets": {
+          "Ref": "PublicSubnets"
+        },
+        "SecurityGroups": [
+          {
+            "Ref": "AlbSecurityGroup"
+          }
+        ]
+      }
+    },
+    "Targets": {
+      "Type": "AWS::ElasticLoadBalancingV2::TargetGroup",
+      "Properties": {
+        "Port": 8080,
+        "Protocol": "HTTP",
+        "TargetType": "instance",
+        "VpcId": {
+          "Ref": "VpcId"
+        },
+        "HealthCheckPath": "/health",
+        "HealthCheckIntervalSeconds": 15,
+        "HealthCheckTimeoutSeconds": 5,
+        "HealthyThresholdCount": 2,
+        "UnhealthyThresholdCount": 3,
+        "Matcher": {
+          "HttpCode": "200"
+        },
+        "TargetGroupAttributes": [
+          {
+            "Key": "deregistration_delay.timeout_seconds",
+            "Value": "30"
+          }
+        ]
+      }
+    },
+    "HttpsListener": {
+      "Type": "AWS::ElasticLoadBalancingV2::Listener",
+      "Properties": {
+        "LoadBalancerArn": {
+          "Ref": "LoadBalancer"
+        },
+        "Port": 443,
+        "Protocol": "HTTPS",
+        "Certificates": [
+          {
+            "CertificateArn": {
+              "Ref": "CertificateArn"
+            }
+          }
+        ],
+        "SslPolicy": "ELBSecurityPolicy-TLS13-1-2-2021-06",
+        "DefaultActions": [
+          {
+            "Type": "forward",
+            "TargetGroupArn": {
+              "Ref": "Targets"
+            }
+          }
+        ]
+      }
+    },
+    "HttpRedirect": {
+      "Type": "AWS::ElasticLoadBalancingV2::Listener",
+      "Properties": {
+        "LoadBalancerArn": {
+          "Ref": "LoadBalancer"
+        },
+        "Port": 80,
+        "Protocol": "HTTP",
+        "DefaultActions": [
+          {
+            "Type": "redirect",
+            "RedirectConfig": {
+              "Protocol": "HTTPS",
+              "Port": "443",
+              "StatusCode": "HTTP_301"
+            }
+          }
+        ]
+      }
+    },
+    "LaunchTemplate": {
+      "Type": "AWS::EC2::LaunchTemplate",
+      "Properties": {
+        "LaunchTemplateData": {
+          "ImageId": {
+            "Ref": "AmiId"
+          },
+          "InstanceType": {
+            "Ref": "InstanceType"
+          },
+          "IamInstanceProfile": {
+            "Arn": {
+              "Fn::GetAtt": [
+                "InstanceProfile",
+                "Arn"
+              ]
+            }
+          },
+          "MetadataOptions": {
+            "HttpTokens": "required",
+            "HttpEndpoint": "enabled"
+          },
+          "Monitoring": {
+            "Enabled": true
+          },
+          "NetworkInterfaces": [
+            {
+              "DeviceIndex": 0,
+              "AssociatePublicIpAddress": {
+                "Fn::If": [
+                  "PublicIp",
+                  true,
+                  false
+                ]
+              },
+              "Groups": [
+                {
+                  "Ref": "AppSecurityGroup"
+                }
+              ]
+            }
+          ],
+          "BlockDeviceMappings": [
+            {
+              "DeviceName": "/dev/xvda",
+              "Ebs": {
+                "VolumeSize": 16,
+                "VolumeType": "gp3",
+                "Encrypted": true,
+                "DeleteOnTermination": true
+              }
+            }
+          ],
+          "UserData": {
+            "Fn::Base64": {
+              "Fn::Sub": "#!/bin/bash\nset -euo pipefail\n# CloudFormation substitutes only the named deployment parameters below.\ndnf install -y docker jq\ncommand -v aws >/dev/null || dnf install -y awscli-2\nsystemctl enable --now docker\nTOKEN=$(curl -fsS -X PUT -H 'X-aws-ec2-metadata-token-ttl-seconds: 300' http://169.254.169.254/latest/api/token)\nINSTANCE_ID=$(curl -fsS -H \"X-aws-ec2-metadata-token: $TOKEN\" http://169.254.169.254/latest/meta-data/instance-id)\nsignal_exit() {\n  CODE=$?\n  STATUS=FAILURE\n  if [ \"$CODE\" = 0 ]; then STATUS=SUCCESS; fi\n  aws cloudformation signal-resource --region '${AWS::Region}' --stack-name '${AWS::StackName}' --logical-resource-id Fleet --unique-id \"$INSTANCE_ID\" --status \"$STATUS\" || true\n}\ntrap signal_exit EXIT\ninstall -d -m 700 /etc/airbnb\numask 077\naws secretsmanager get-secret-value --region '${AWS::Region}' --secret-id '${AppSecretArn}' --query SecretString --output text > /run/airbnb-secret.json\njq -e '(.MONGODB_URI|type==\"string\") and (.ADMIN_API_TOKEN|type==\"string\" and length>=32) and (.CORS_ORIGIN|type==\"string\") and ([.MONGODB_URI,.ADMIN_API_TOKEN,.CORS_ORIGIN]|all(test(\"[\\r\\n]\")|not))' /run/airbnb-secret.json >/dev/null\njq -r 'with_entries(select(.key==\"MONGODB_URI\" or .key==\"ADMIN_API_TOKEN\" or .key==\"CORS_ORIGIN\")) | to_entries[] | \"\\(.key)=\\(.value)\"' /run/airbnb-secret.json > /etc/airbnb/backend.env\nprintf '\\nNODE_ENV=production\\nPORT=5000\\nMETRICS_ENABLED=true\\nMETRICS_ENVIRONMENT=${AWS::StackName}\\nLOAD_TEST_DATA_ENABLED=${EnableLoadTesting}\\n' >> /etc/airbnb/backend.env\nrm -f /run/airbnb-secret.json\nfor IMAGE in '${BackendImage}' '${FrontendImage}'; do\n  REGISTRY=$(printf '%s' \"$IMAGE\" | cut -d/ -f1)\n  aws ecr get-login-password --region '${AWS::Region}' | docker login --username AWS --password-stdin \"$REGISTRY\"\n  docker pull \"$IMAGE\"\ndone\ndocker network create airbnb\ndocker run -d --name backend --network airbnb --restart unless-stopped --init --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges --env-file /etc/airbnb/backend.env --log-driver awslogs --log-opt awslogs-region='${AWS::Region}' --log-opt awslogs-group='${ApplicationLogs}' --log-opt awslogs-stream=\"$INSTANCE_ID-api\" '${BackendImage}'\ndocker run -d --name frontend --network airbnb --restart unless-stopped --init --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges -p 8080:8080 --log-driver awslogs --log-opt awslogs-region='${AWS::Region}' --log-opt awslogs-group='${ApplicationLogs}' --log-opt awslogs-stream=\"$INSTANCE_ID-web\" '${FrontendImage}'\nfor attempt in $(seq 1 60); do\n  if curl -fsS http://127.0.0.1:8080/health >/dev/null; then exit 0; fi\n  sleep 5\ndone\nexit 1\n"
+            }
+          },
+          "CreditSpecification": {
+            "CpuCredits": "standard"
+          }
+        }
+      }
+    },
+    "Fleet": {
+      "Type": "AWS::AutoScaling::AutoScalingGroup",
+      "DependsOn": [
+        "HttpsListener"
+      ],
+      "CreationPolicy": {
+        "ResourceSignal": {
+          "Count": 1,
+          "Timeout": "PT15M"
+        }
+      },
+      "UpdatePolicy": {
+        "AutoScalingRollingUpdate": {
+          "MinInstancesInService": 0,
+          "MaxBatchSize": 1,
+          "PauseTime": "PT15M",
+          "WaitOnResourceSignals": true
+        }
+      },
+      "Properties": {
+        "MinSize": "1",
+        "DesiredCapacity": "1",
+        "MaxSize": {
+          "Ref": "MaximumInstances"
+        },
+        "VPCZoneIdentifier": {
+          "Ref": "ApplicationSubnets"
+        },
+        "HealthCheckType": "ELB",
+        "HealthCheckGracePeriod": 300,
+        "DefaultInstanceWarmup": 180,
+        "TargetGroupARNs": [
+          {
+            "Ref": "Targets"
+          }
+        ],
+        "LaunchTemplate": {
+          "LaunchTemplateId": {
+            "Ref": "LaunchTemplate"
+          },
+          "Version": {
+            "Fn::GetAtt": [
+              "LaunchTemplate",
+              "LatestVersionNumber"
+            ]
+          }
+        },
+        "MetricsCollection": [
+          {
+            "Granularity": "1Minute",
+            "Metrics": [
+              "GroupDesiredCapacity",
+              "GroupInServiceInstances",
+              "GroupPendingInstances",
+              "GroupTerminatingInstances"
+            ]
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "IT457-Group43",
+            "PropagateAtLaunch": true
+          }
+        ]
+      }
+    },
+    "CpuScaling": {
+      "Type": "AWS::AutoScaling::ScalingPolicy",
+      "Properties": {
+        "AutoScalingGroupName": {
+          "Ref": "Fleet"
+        },
+        "PolicyType": "TargetTrackingScaling",
+        "TargetTrackingConfiguration": {
+          "TargetValue": {
+            "Ref": "CpuTarget"
+          },
+          "PredefinedMetricSpecification": {
+            "PredefinedMetricType": "ASGAverageCPUUtilization"
+          }
+        }
+      }
+    },
+    "ServerErrorAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmDescription": "ALB target 5xx count; inspect logs and DB before changing capacity",
+        "Namespace": "AWS/ApplicationELB",
+        "MetricName": "HTTPCode_Target_5XX_Count",
+        "Dimensions": [
+          {
+            "Name": "LoadBalancer",
+            "Value": {
+              "Fn::GetAtt": [
+                "LoadBalancer",
+                "LoadBalancerFullName"
+              ]
+            }
+          }
+        ],
+        "Statistic": "Sum",
+        "Period": 60,
+        "EvaluationPeriods": 2,
+        "Threshold": 5,
+        "ComparisonOperator": "GreaterThanThreshold",
+        "TreatMissingData": "notBreaching"
+      }
+    },
+    "LatencyAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "Namespace": "AWS/ApplicationELB",
+        "MetricName": "TargetResponseTime",
+        "Dimensions": [
+          {
+            "Name": "LoadBalancer",
+            "Value": {
+              "Fn::GetAtt": [
+                "LoadBalancer",
+                "LoadBalancerFullName"
+              ]
+            }
+          }
+        ],
+        "ExtendedStatistic": "p95",
+        "Period": 60,
+        "EvaluationPeriods": 3,
+        "Threshold": 1.5,
+        "ComparisonOperator": "GreaterThanThreshold",
+        "TreatMissingData": "notBreaching"
+      }
+    },
+    "BookingFailureAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "Namespace": "AirbnbSOA",
+        "MetricName": "BookingFailureCount",
+        "Dimensions": [
+          {
+            "Name": "Environment",
+            "Value": {
+              "Ref": "AWS::StackName"
+            }
+          },
+          {
+            "Name": "Service",
+            "Value": "Booking"
+          }
+        ],
+        "Statistic": "Sum",
+        "Period": 60,
+        "EvaluationPeriods": 2,
+        "Threshold": 3,
+        "ComparisonOperator": "GreaterThanThreshold",
+        "TreatMissingData": "notBreaching"
+      }
+    },
+    "Dashboard": {
+      "Type": "AWS::CloudWatch::Dashboard",
+      "Properties": {
+        "DashboardBody": {
+          "Fn::Sub": "{\"widgets\":[{\"type\":\"metric\",\"width\":12,\"height\":6,\"properties\":{\"title\":\"ALB latency p95 / p99\",\"region\":\"${AWS::Region}\",\"metrics\":[[\"AWS/ApplicationELB\",\"TargetResponseTime\",\"LoadBalancer\",\"${LoadBalancer.LoadBalancerFullName}\",{\"stat\":\"p95\"}],[\"...\",{\"stat\":\"p99\"}]],\"stat\":\"Average\",\"period\":60}},{\"type\":\"metric\",\"width\":12,\"height\":6,\"properties\":{\"title\":\"CPU and in-service instances\",\"region\":\"${AWS::Region}\",\"metrics\":[[\"AWS/EC2\",\"CPUUtilization\",\"AutoScalingGroupName\",\"${Fleet}\"],[\"AWS/AutoScaling\",\"GroupInServiceInstances\",\"AutoScalingGroupName\",\"${Fleet}\",{\"yAxis\":\"right\"}]],\"stat\":\"Average\",\"period\":60}},{\"type\":\"metric\",\"width\":12,\"height\":6,\"properties\":{\"title\":\"Requests and target 5xx / minute\",\"region\":\"${AWS::Region}\",\"metrics\":[[\"AWS/ApplicationELB\",\"RequestCount\",\"LoadBalancer\",\"${LoadBalancer.LoadBalancerFullName}\"],[\"AWS/ApplicationELB\",\"HTTPCode_Target_5XX_Count\",\"LoadBalancer\",\"${LoadBalancer.LoadBalancerFullName}\"]],\"stat\":\"Sum\",\"period\":60}},{\"type\":\"metric\",\"width\":12,\"height\":6,\"properties\":{\"title\":\"Booking attempts, conflicts and unexpected failures\",\"region\":\"${AWS::Region}\",\"metrics\":[[\"AirbnbSOA\",\"BookingAttemptCount\",\"Environment\",\"${AWS::StackName}\",\"Service\",\"Booking\"],[\".\",\"BookingConflictCount\",\".\",\".\",\".\",\".\"],[\".\",\"BookingFailureCount\",\".\",\".\",\".\",\".\"]],\"stat\":\"Sum\",\"period\":60}},{\"type\":\"metric\",\"width\":12,\"height\":6,\"properties\":{\"title\":\"Unexpected booking failure rate (%)\",\"region\":\"${AWS::Region}\",\"period\":60,\"stat\":\"Sum\",\"metrics\":[[\"AirbnbSOA\",\"BookingAttemptCount\",\"Environment\",\"${AWS::StackName}\",\"Service\",\"Booking\",{\"id\":\"attempts\",\"visible\":false}],[\"AirbnbSOA\",\"BookingFailureCount\",\"Environment\",\"${AWS::StackName}\",\"Service\",\"Booking\",{\"id\":\"failures\",\"visible\":false}],[{\"expression\":\"IF(attempts>0,100*failures/attempts)\",\"label\":\"Unexpected booking failure %\",\"id\":\"failure_rate\"}]]}}]}"
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "AlbDnsName": {
+      "Value": {
+        "Fn::GetAtt": [
+          "LoadBalancer",
+          "DNSName"
+        ]
+      }
+    },
+    "AutoScalingGroupName": {
+      "Value": {
+        "Ref": "Fleet"
+      }
+    },
+    "LoadBalancerFullName": {
+      "Value": {
+        "Fn::GetAtt": [
+          "LoadBalancer",
+          "LoadBalancerFullName"
+        ]
+      }
+    },
+    "TargetGroupArn": {
+      "Value": {
+        "Ref": "Targets"
+      }
+    },
+    "ApplicationLogGroup": {
+      "Value": {
+        "Ref": "ApplicationLogs"
+      }
+    },
+    "DashboardName": {
+      "Value": {
+        "Ref": "Dashboard"
+      }
+    },
+    "InstanceSecurityGroup": {
+      "Value": {
+        "Ref": "AppSecurityGroup"
+      }
+    }
+  }
+}

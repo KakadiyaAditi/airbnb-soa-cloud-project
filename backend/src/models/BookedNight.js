@@ -6,8 +6,8 @@ const mongoose = require('mongoose');
  * The UNIQUE index on { listingId, night } is the concurrency guard:
  * MongoDB itself refuses a second document for the same listing and night,
  * so two simultaneous requests for overlapping dates cannot both succeed.
- * This works on a single local MongoDB server, which does not support
- * multi-document transactions (those need a replica set).
+ * Booking and night writes are committed together in a transaction;
+ * application startup therefore requires a replica set or sharded cluster.
  */
 const bookedNightSchema = new mongoose.Schema(
   {

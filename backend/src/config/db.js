@@ -12,7 +12,20 @@ mongoose.set('strictQuery', true);
 async function connectDB(uri = config.mongoUri) {
   // Make sure every model is registered before building indexes.
   require('../models');
-  await mongoose.connect(uri, { serverSelectionTimeoutMS: 5000 });
+  await mongoose.connect(uri, {
+    serverSelectionTimeoutMS: 5000,
+    maxPoolSize: config.mongoMaxPoolSize,
+    minPoolSize: 0,
+    maxIdleTimeMS: 30000,
+    waitQueueTimeoutMS: 5000,
+  });
+  const hello = await mongoose.connection.db.admin().command({ hello: 1 });
+  if (!hello.setName && hello.msg !== 'isdbgrid') {
+    await mongoose.disconnect();
+    throw new Error(
+      'Booking consistency requires a MongoDB replica set. Use docker compose or the replica-set demo/test runner.'
+    );
+  }
   await Promise.all(Object.values(mongoose.models).map((model) => model.init()));
   return mongoose.connection;
 }

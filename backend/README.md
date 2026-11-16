@@ -1,3 +1,5 @@
+> Option B implementation update: booking writes now require a MongoDB replica set and use transactions plus optional durable Idempotency-Key replay. Cancellation is safe to repeat. Use the root DOCKER_SETUP.md or npm.cmd run test:isolated; standalone examples in legacy report material are historical. AWS preparation, not actual resource deployment, is in AWS_DEPLOYMENT_GUIDE.md.
+
 # Airbnb SOA – Backend
 
 Node.js + Express + MongoDB backend with four services: **Listing**, **Search**, **Availability** and **Booking**.

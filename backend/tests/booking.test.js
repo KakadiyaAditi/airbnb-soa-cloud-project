@@ -229,9 +229,10 @@ describe('Booking Service - PATCH /api/bookings/:id/status', () => {
     expect((await book({ guestEmail: 'x@example.com' })).status).toBe(409);
   });
 
-  test('a cancelled booking cannot be confirmed or cancelled again', async () => {
+  test('cancellation is idempotent and cannot be reconfirmed', async () => {
     await setStatus('Cancelled');
-    for (const status of ['Confirmed', 'Cancelled']) {
+    expect((await setStatus('Cancelled')).status).toBe(200);
+    for (const status of ['Confirmed']) {
       const res = await setStatus(status);
       expect(res.status).toBe(409);
       expect(res.body.error.code).toBe('INVALID_STATUS_TRANSITION');

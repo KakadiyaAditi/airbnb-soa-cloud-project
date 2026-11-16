@@ -9,7 +9,12 @@ const MAX_NIGHTS = 30;
  * check-out after check-in, stay no longer than MAX_NIGHTS.
  * Returns { checkIn, checkOut, nights } as UTC-midnight Dates.
  */
-function validateDateRange(checkInRaw, checkOutRaw, names = { in: 'checkInDate', out: 'checkOutDate' }) {
+function validateDateRange(
+  checkInRaw,
+  checkOutRaw,
+  names = { in: 'checkInDate', out: 'checkOutDate' },
+  { allowPast = false } = {}
+) {
   const errors = [];
   const checkIn = parseDateOnly(checkInRaw);
   const checkOut = parseDateOnly(checkOutRaw);
@@ -17,22 +22,31 @@ function validateDateRange(checkInRaw, checkOutRaw, names = { in: 'checkInDate',
   if (checkInRaw === undefined || checkInRaw === '') {
     errors.push({ field: names.in, message: `${names.in} is required` });
   } else if (!checkIn) {
-    errors.push({ field: names.in, message: `${names.in} must be a valid date in YYYY-MM-DD format` });
+    errors.push({
+      field: names.in,
+      message: `${names.in} must be a valid date in YYYY-MM-DD format`,
+    });
   }
   if (checkOutRaw === undefined || checkOutRaw === '') {
     errors.push({ field: names.out, message: `${names.out} is required` });
   } else if (!checkOut) {
-    errors.push({ field: names.out, message: `${names.out} must be a valid date in YYYY-MM-DD format` });
+    errors.push({
+      field: names.out,
+      message: `${names.out} must be a valid date in YYYY-MM-DD format`,
+    });
   }
 
-  if (checkIn && checkIn < todayUtc()) {
+  if (!allowPast && checkIn && checkIn < todayUtc()) {
     errors.push({ field: names.in, message: `${names.in} cannot be in the past` });
   }
   if (checkIn && checkOut) {
     if (checkOut <= checkIn) {
       errors.push({ field: names.out, message: `${names.out} must be after ${names.in}` });
     } else if (nightsBetween(checkIn, checkOut) > MAX_NIGHTS) {
-      errors.push({ field: names.out, message: `A stay cannot be longer than ${MAX_NIGHTS} nights` });
+      errors.push({
+        field: names.out,
+        message: `A stay cannot be longer than ${MAX_NIGHTS} nights`,
+      });
     }
   }
 

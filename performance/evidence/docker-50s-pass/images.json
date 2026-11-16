@@ -1,0 +1,7 @@
+{
+  "source": "actual-local-Docker-inspect",
+  "measuredAt": "2026-11-16T11:25:14.523Z",
+  "backend": "sha256:5734d76a828c936898f95182150e37e08f15cd4ea270fe64dae6f52515412e29",
+  "frontend": "sha256:773d6012709e4a54ba935509007c55f95620c55b9dc0759154337baa71a79e83",
+  "mongo": "sha256:e0ce8c35124d4a9f9785532d1f268f39e9728ffa1cb38f46fa482436424c4bd3"
+}

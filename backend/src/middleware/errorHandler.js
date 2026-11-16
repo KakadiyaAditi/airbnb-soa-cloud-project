@@ -23,7 +23,13 @@ function errorHandler(err, req, res, next) {
   } else if (error.message === 'Not allowed by CORS') {
     error = new ApiError(403, 'CORS_FORBIDDEN', 'Origin not allowed');
   } else if (
-    ['MongoServerSelectionError', 'MongoNetworkError', 'MongoNotConnectedError'].includes(error.name)
+    [
+      'MongoServerSelectionError',
+      'MongoNetworkError',
+      'MongoNotConnectedError',
+      'MongoOperationTimeoutError',
+      'MongoNetworkTimeoutError',
+    ].includes(error.name)
   ) {
     error = new ApiError(503, 'DATABASE_UNAVAILABLE', 'Database is temporarily unavailable');
   }
@@ -34,6 +40,8 @@ function errorHandler(err, req, res, next) {
     error = new ApiError(500, 'INTERNAL_ERROR', 'An unexpected error occurred');
   }
 
+  res.locals.errorCode = error.code;
+  if (error.statusCode === 503) res.setHeader('Retry-After', '1');
   const body = { success: false, error: { code: error.code, message: error.message } };
   if (error.details) body.error.details = error.details;
   res.status(error.statusCode).json(body);

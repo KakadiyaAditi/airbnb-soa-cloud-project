@@ -7,7 +7,13 @@ const ACTIVE_STATUSES = ['Pending', 'Confirmed'];
 const bookingSchema = new mongoose.Schema(
   {
     listingId: { type: mongoose.Schema.Types.ObjectId, ref: 'Listing', required: true },
-    guestName: { type: String, required: [true, 'guestName is required'], trim: true, minlength: 2, maxlength: 100 },
+    guestName: {
+      type: String,
+      required: [true, 'guestName is required'],
+      trim: true,
+      minlength: 2,
+      maxlength: 100,
+    },
     guestEmail: {
       type: String,
       required: [true, 'guestEmail is required'],
@@ -24,6 +30,9 @@ const bookingSchema = new mongoose.Schema(
     pricePerNight: { type: Number, required: true, min: 0 },
     totalPrice: { type: Number, required: true, min: 0 },
     bookingStatus: { type: String, enum: BOOKING_STATUSES, default: 'Pending' },
+    idempotencyKeyHash: { type: String, select: false },
+    idempotencyFingerprint: { type: String, select: false },
+    idempotencyResponse: { type: mongoose.Schema.Types.Mixed, select: false },
   },
   { timestamps: true, versionKey: false }
 );
@@ -37,6 +46,8 @@ bookingSchema.pre('validate', function checkDates() {
 // Supports the overlap query used by the Availability Service.
 bookingSchema.index({ listingId: 1, bookingStatus: 1, checkInDate: 1, checkOutDate: 1 });
 bookingSchema.index({ guestEmail: 1, createdAt: -1 });
+// Retain replay records with their bookings; no TTL can silently permit duplicate intent.
+bookingSchema.index({ idempotencyKeyHash: 1 }, { unique: true, sparse: true });
 
 const Booking = mongoose.model('Booking', bookingSchema);
 

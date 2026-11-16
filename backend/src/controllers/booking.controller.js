@@ -16,8 +16,15 @@ async function listBookings(req, res) {
 }
 
 async function createBooking(req, res) {
-  const input = validateCreateBooking(req.body);
-  const booking = await bookingService.createBooking(input);
+  const idempotencyKey = req.get('Idempotency-Key');
+  if (idempotencyKey !== undefined && !/^[A-Za-z0-9._:-]{8,128}$/.test(idempotencyKey))
+    throw ApiError.badRequest(
+      'Idempotency-Key must contain 8–128 letters, digits, dots, colons, underscores or hyphens'
+    );
+  // A completed intent can be replayed after its dates have passed. New past-date
+  // writes are still rejected by the service after checking the replay record.
+  const input = validateCreateBooking(req.body, { allowPast: !!idempotencyKey });
+  const booking = await bookingService.createBooking(input, { idempotencyKey });
   sendSuccess(res, booking, { status: 201 });
 }
 

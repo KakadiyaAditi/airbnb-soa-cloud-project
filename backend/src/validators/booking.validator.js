@@ -9,7 +9,7 @@ const OBJECT_ID = /^[a-f\d]{24}$/i;
  * Validate the body of POST /api/bookings.
  * Collects every problem so the frontend can show all field errors at once.
  */
-function validateCreateBooking(body) {
+function validateCreateBooking(body, { allowPast = false } = {}) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     throw ApiError.badRequest('Request body must be a JSON object');
   }
@@ -40,12 +40,15 @@ function validateCreateBooking(body) {
   if (numberOfGuests === undefined || numberOfGuests === null || numberOfGuests === '') {
     errors.push({ field: 'numberOfGuests', message: 'numberOfGuests is required' });
   } else if (!Number.isInteger(numberOfGuests) || numberOfGuests < 1) {
-    errors.push({ field: 'numberOfGuests', message: 'numberOfGuests must be a positive whole number' });
+    errors.push({
+      field: 'numberOfGuests',
+      message: 'numberOfGuests must be a positive whole number',
+    });
   }
 
   let range;
   try {
-    range = validateDateRange(checkInDate, checkOutDate);
+    range = validateDateRange(checkInDate, checkOutDate, undefined, { allowPast });
   } catch (err) {
     errors.push(...(err.details || []));
   }

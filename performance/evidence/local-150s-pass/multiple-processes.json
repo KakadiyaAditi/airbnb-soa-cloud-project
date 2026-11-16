@@ -1,0 +1,10 @@
+{
+  "source": "actual-two-node-processes-shared-mongodb",
+  "measuredAt": "2026-11-16T10:36:29.955Z",
+  "attempts": 20,
+  "created": 1,
+  "conflicts": 19,
+  "crossProcessReplay": true,
+  "creatorTerminationSurvived": true,
+  "cancellationReleasedNights": true
+}

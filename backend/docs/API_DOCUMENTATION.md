@@ -1,3 +1,5 @@
+> Option B update: booking writes require a MongoDB replica set. POST /api/bookings optionally accepts Idempotency-Key (8?128 ASCII letters/digits/._:-); same key/payload replays the original 201, mismatch returns 409 IDEMPOTENCY_MISMATCH. Booking and cancellation writes are transactional. Repeating cancellation returns 200. See ../../BOOKING_CONCURRENCY.md.
+
 # API Documentation – Airbnb SOA Backend
 
 Base URL (local development): `http://localhost:5000`
@@ -495,7 +497,7 @@ Confirms or cancels a booking.
 |---|---|---|
 | Pending | allowed | allowed |
 | Confirmed | 409 | allowed |
-| Cancelled | 409 | 409 |
+| Cancelled | 409 | 200 (safe repeat) |
 
 Cancelling releases the dates immediately so they can be booked again.
 

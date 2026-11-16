@@ -11,6 +11,7 @@ const { isConnected } = require('./config/db');
 const apiRouter = require('./routes');
 const notFound = require('./middleware/notFound');
 const errorHandler = require('./middleware/errorHandler');
+const metrics = require('./middleware/metrics');
 
 function corsOptions() {
   if (config.corsOrigins.includes('*')) return { origin: true };
@@ -21,7 +22,7 @@ function corsOptions() {
       return callback(new Error('Not allowed by CORS'));
     },
     methods: ['GET', 'POST', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key'],
   };
 }
 
@@ -31,11 +32,13 @@ function createApp() {
   app.disable('x-powered-by');
   // Behind an AWS load balancer / reverse proxy, trust the first proxy hop.
   app.set('trust proxy', 1);
+  app.use(metrics);
 
   app.use(helmet());
   app.use(cors(corsOptions()));
   app.use(express.json({ limit: '10kb' }));
-  if (!config.isTest) app.use(morgan(config.isProduction ? 'combined' : 'dev'));
+  if (!config.isTest && !config.metricsEnabled)
+    app.use(morgan(config.isProduction ? 'combined' : 'dev'));
 
   // Health check for load balancers and uptime monitors.
   app.get(['/health', '/api/health'], (req, res) => {
@@ -45,6 +48,9 @@ function createApp() {
       data: {
         status: dbUp ? 'ok' : 'degraded',
         database: dbUp ? 'connected' : 'disconnected',
+        bookingTransactions: true,
+        bookingIdempotency: true,
+        loadTestingAllowed: config.loadTestingAllowed,
         uptimeSeconds: Math.round(process.uptime()),
         timestamp: new Date().toISOString(),
       },

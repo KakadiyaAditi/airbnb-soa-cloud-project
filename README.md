@@ -18,7 +18,13 @@ This is a single-manager academic workflow. Guests still use booking references 
 
 ## Run the backend
 
-Requires Node.js 22.12+ and a running local MongoDB server. From the repository root, open a terminal:
+**Option B is the primary deployment path.** See [Docker setup](DOCKER_SETUP.md), [cloud architecture](CLOUD_ARCHITECTURE.md), [booking correctness](BOOKING_CONCURRENCY.md), [AWS preparation](AWS_DEPLOYMENT_GUIDE.md), [load testing](LOAD_TESTING_GUIDE.md), [measured results](PERFORMANCE_ANALYSIS.md), [cost review](COST_ESTIMATION.md) and [demonstration](FINAL_DEMONSTRATION_GUIDE.md). AWS resources have not been created merely by adding these files.
+
+From the root, `docker compose up --build` starts the production frontend/API and an isolated persistent local replica-set database; the website is http://localhost:8080. Configure root `.env` from `.env.example` with a private manager code, then seed intentionally as described in `DOCKER_SETUP.md`. Never reset a database containing data you need to keep.
+
+**Manual backend setups require a MongoDB replica set.** Transaction support is mandatory for booking correctness; standalone MongoDB is rejected at startup. Demo scripts automatically provide a temporary replica set. `npm.cmd run test:isolated -- --coverage` in backend runs the suite without touching a normal database.
+
+Requires Node.js 22.14+ and a running local MongoDB server. From the repository root, open a terminal:
 
 ```powershell
 cd backend

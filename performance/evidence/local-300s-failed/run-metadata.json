@@ -1,0 +1,9 @@
+{
+    "exitCode":  99,
+    "gitCommit":  "4b9f595d95b3ad1914108951e2edaf417f00888a",
+    "source":  "actual-local-run",
+    "phaseSeconds":  60,
+    "target":  "http://localhost:5188",
+    "awsMetrics":  "NOT_MEASURED",
+    "dirty":  true
+}

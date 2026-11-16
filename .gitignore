@@ -19,3 +19,8 @@ test-results/
 .DS_Store
 Thumbs.db
 .idea/
+performance/results/
+performance/*.local.json
+infra/*.local.json
+.aws-sam/
+__pycache__/
