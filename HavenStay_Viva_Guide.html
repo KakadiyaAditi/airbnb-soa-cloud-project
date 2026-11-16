@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HavenStay | Cloud Computing Viva Guide</title>
+<style>
+@page { size: A4; margin: 16mm 17mm; }
+* { box-sizing: border-box; }
+body { margin: 0; color: #26302d; font: 10.5pt/1.48 "Segoe UI", Arial, sans-serif; }
+h1,h2,h3,p { margin-top: 0; }
+h1 { margin-bottom: 5px; color: #78382f; font-size: 28pt; line-height: 1.1; }
+h2 { margin: 0 0 10px; color: #78382f; font-size: 17pt; }
+h3 { margin: 0 0 4px; font-size: 11pt; }
+p { margin-bottom: 8px; }
+ul,ol { margin: 5px 0 10px; padding-left: 21px; }
+li { margin: 3px 0; }
+.cover { padding-top: 14mm; }
+.kicker { color: #a24b3e; font-weight: 700; letter-spacing: 1.6px; text-transform: uppercase; font-size: 9pt; }
+.subtitle { color: #63716b; font-size: 13pt; margin-bottom: 20px; }
+.pill { display: inline-block; padding: 4px 9px; border-radius: 99px; background: #f4eee8; color: #78382f; font-size: 9pt; font-weight: 700; }
+.box { border: 1px solid #e3e4de; border-radius: 10px; padding: 12px 14px; margin: 10px 0; }
+.accent { border: 0; background: #f7f2eb; }
+.quote { font-size: 12pt; line-height: 1.55; }
+.small { color: #64716c; font-size: 9pt; }
+.flow { display: flex; align-items: stretch; gap: 5px; margin: 12px 0; }
+.node { flex: 1; border: 1px solid #d9ddd5; border-radius: 8px; padding: 9px 7px; text-align: center; font-size: 9pt; background: #fbfbf8; }
+.arrow { align-self: center; color: #a24b3e; font-weight: 700; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.service { border-left: 3px solid #b44737; padding: 6px 10px; background: #faf9f6; }
+.qa { margin: 0 0 10px; break-inside: avoid; }
+.qa strong { color: #78382f; }
+.page { break-after: page; page-break-after: always; }
+.page:last-child { break-after: auto; page-break-after: auto; }
+.footer { margin-top: 12px; color: #78817c; font-size: 8pt; }
+table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+td,th { padding: 6px 7px; text-align: left; vertical-align: top; border-bottom: 1px solid #e4e5df; }
+th { color: #78382f; background: #f7f2eb; }
+</style>
+</head>
+<body>
+<section class="page cover">
+  <div class="kicker">Cloud computing viva · quick revision</div>
+  <h1>HavenStay</h1>
+  <p class="subtitle">A simple guide for your 10-minute project viva</p>
+  <span class="pill">Read this first · 60-second introduction</span>
+  <div class="box accent quote"><strong>“HavenStay is a web platform for discovering accommodation and sending booking requests. It has a JavaScript frontend and a Node.js/Express backend, organized into Listing, Search, Availability and Booking services. MongoDB stores listings and bookings. Docker Compose runs the app locally, and the cloud design shows how the same app can run behind a load balancer with monitoring and auto scaling.”</strong></div>
+  <h2>What the project does</h2>
+  <ul>
+    <li>Guests search and filter stays, view details and check available dates.</li>
+    <li>Guests submit a booking request and can look it up or cancel it.</li>
+    <li>Hosts can publish a property; a manager can accept or decline requests.</li>
+    <li>Saved stays and comparisons help guests decide.</li>
+  </ul>
+  <h2>Architecture in one picture</h2>
+  <div class="flow">
+    <div class="node"><strong>Guest browser</strong><br>HavenStay UI</div><div class="arrow">→</div>
+    <div class="node"><strong>Nginx</strong><br>Static files + API proxy</div><div class="arrow">→</div>
+    <div class="node"><strong>Node.js + Express</strong><br>Four logical services</div><div class="arrow">→</div>
+    <div class="node"><strong>MongoDB</strong><br>Shared persistent data</div>
+  </div>
+  <div class="box"><h3>What happens when someone searches?</h3><p>Browser sends an HTTP request → Nginx forwards <code>/api/...</code> to Express → Search asks the database for matching stays → JSON results return to the browser.</p></div>
+  <p class="footer">Project: HavenStay · Local demo address: http://localhost:8080</p>
+</section>
+
+<section class="page">
+  <div class="kicker">Understand the application</div>
+  <h2>Four service responsibilities</h2>
+  <div class="grid2">
+    <div class="service"><h3>Listing</h3><p>Creates, retrieves and paginates property listings.</p></div>
+    <div class="service"><h3>Search</h3><p>Filters stays by destination, price, guests, dates and amenities.</p></div>
+    <div class="service"><h3>Availability</h3><p>Shows reserved nights and checks whether chosen dates are free.</p></div>
+    <div class="service"><h3>Booking</h3><p>Creates a request, calculates its total and handles status changes or cancellation.</p></div>
+  </div>
+  <div class="box"><strong>Good viva wording:</strong> These are separate service modules in one Express application. They have clear responsibilities and API routes, but they are not four independently deployed microservices.</div>
+  <h2>How booking avoids double-booking</h2>
+  <ol>
+    <li>Each booked night is recorded for a listing. Check-out is exclusive, so one guest can leave the same day another arrives.</li>
+    <li>A unique database index allows only one active reservation for the same listing and night.</li>
+    <li>MongoDB transaction writes the booking and its reserved nights together. If one write fails, the transaction rolls back.</li>
+    <li>Overlapping requests receive a conflict response; the frontend does not retry a known conflict.</li>
+  </ol>
+  <div class="box accent"><h3>What is idempotency?</h3><p>A safe retry of the same booking request should not create a second booking. The frontend reuses an idempotency key; the backend returns the original result for the same key and same request data.</p></div>
+  <h2>Key words in plain English</h2>
+  <table><tr><th>Term</th><th>Easy meaning</th></tr>
+    <tr><td>REST API</td><td>URLs and HTTP methods that let the browser and backend exchange data.</td></tr>
+    <tr><td>Replica set</td><td>MongoDB nodes that maintain the same data and support transactions. The local Docker setup uses a one-node replica set for transaction support.</td></tr>
+    <tr><td>Reverse proxy</td><td>Nginx receives browser traffic and forwards API requests to the backend.</td></tr>
+    <tr><td>Stateless app server</td><td>The server keeps no essential booking state only in its memory; shared database state lets another app replica continue the work.</td></tr>
+  </table>
+  <p class="footer">Remember: transaction = all related booking writes succeed together, or none do.</p>
+</section>
+
+<section class="page">
+  <div class="kicker">Cloud computing connection</div>
+  <h2>How the project runs</h2>
+  <table><tr><th>Environment</th><th>What it means</th></tr>
+    <tr><td>Local Docker Compose</td><td>Runs frontend, backend and MongoDB containers together. The database volume persists across container restarts.</td></tr>
+    <tr><td>Cloud design</td><td>Prepared AWS design: HTTPS load balancer, EC2 Auto Scaling Group, app containers, Secrets Manager and CloudWatch.</td></tr>
+    <tr><td>Actual deployment status</td><td>AWS resources have not been deployed. Say this clearly; the local Docker setup is the running environment.</td></tr>
+  </table>
+  <h2>Cloud ideas to explain</h2>
+  <ul>
+    <li><strong>Scale out:</strong> add more backend instances when demand grows. A load balancer sends requests to healthy instances.</li>
+    <li><strong>Shared state:</strong> all backend replicas use the same persistent database, so each sees the same bookings.</li>
+    <li><strong>Health checks:</strong> <code>/health</code> tells the platform whether the API and database are ready.</li>
+    <li><strong>Monitoring:</strong> CloudWatch is planned for logs, request counts, latency, errors and alarms.</li>
+    <li><strong>Secrets:</strong> private manager credentials belong on the server or in a secret store, never in public frontend code.</li>
+    <li><strong>Availability:</strong> multiple app instances can reduce downtime, but the database also needs backups and a resilient production topology.</li>
+  </ul>
+  <div class="box accent"><h3>If asked “Is it deployed on AWS?”</h3><p>“The AWS architecture and infrastructure template are prepared, but AWS resources have not been deployed. I can demonstrate the integrated app locally with Docker Compose. I would deploy only after configuring the VPC, HTTPS certificate, secrets and persistent database.”</p></div>
+  <h2>Technology at a glance</h2>
+  <ul>
+    <li>Frontend: JavaScript, Vite and responsive CSS.</li>
+    <li>Backend: Node.js, Express and Mongoose.</li>
+    <li>Data: MongoDB replica set for transaction support.</li>
+    <li>Packaging: Docker images and Docker Compose.</li>
+    <li>Web entry point: Nginx serves the frontend and proxies API paths.</li>
+  </ul>
+  <p class="footer">Keep claims accurate: “designed/prepared for AWS” is different from “deployed on AWS.”</p>
+</section>
+
+<section class="page">
+  <div class="kicker">Likely viva questions</div>
+  <h2>Short answers to practise</h2>
+  <div class="qa"><strong>1. What problem does HavenStay solve?</strong><br>It brings stay discovery, availability checks and booking requests into one simple website.</div>
+  <div class="qa"><strong>2. Why did you use a service-oriented design?</strong><br>It separates the main business responsibilities, making the code easier to understand, change and test.</div>
+  <div class="qa"><strong>3. Is each service a microservice?</strong><br>No. They are logical modules inside one backend application, not separate deployed services.</div>
+  <div class="qa"><strong>4. What does Docker do here?</strong><br>It packages the app and its dependencies into containers so the same setup can run consistently on another machine.</div>
+  <div class="qa"><strong>5. Why use MongoDB transactions?</strong><br>A booking and its reserved nights must be saved together. A transaction prevents partial writes.</div>
+  <div class="qa"><strong>6. How do you prevent two guests booking the same dates?</strong><br>A unique index protects each listing-night pair, and the booking operation uses a transaction. One conflicting request is rejected.</div>
+  <div class="qa"><strong>7. What is the role of Nginx?</strong><br>It serves the built frontend and forwards API requests to Express, so the browser can use one website origin.</div>
+  <div class="qa"><strong>8. How would the design scale?</strong><br>Run more stateless backend replicas behind a load balancer, while they share the same persistent database.</div>
+  <div class="qa"><strong>9. What would you monitor?</strong><br>Request volume, response time, errors, booking conflicts, instance health and database performance.</div>
+  <div class="qa"><strong>10. What is a current limitation?</strong><br>The cloud design is prepared but not deployed; the local database is a single-node replica set, not production high availability.</div>
+  <div class="qa"><strong>11. What would you improve before real customers use it?</strong><br>Add guest and host accounts and authorization, payment handling, a resilient managed database, backups, and a clear price currency.</div>
+  <div class="qa"><strong>12. What did you learn?</strong><br>Cloud apps need more than containers: shared persistent data, safe concurrent writes, health checks, secrets, monitoring and honest deployment verification all matter.</div>
+  <div class="box accent"><h3>Last-minute reminder</h3><p>Answer in this order: <strong>what it does → how a request flows → how booking data stays correct → how cloud deployment could scale it.</strong> Keep each answer to two or three sentences.</p></div>
+  <p class="footer">You’ve got this. Use the demo to show one search, one listing detail and the health/API response.</p>
+</section>
+</body>
+</html>

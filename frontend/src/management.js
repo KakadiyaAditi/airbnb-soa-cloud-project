@@ -7,7 +7,7 @@ export function managementPage(api, main, isCurrent) {
     requestVersion = 0;
   const login = (error = "") => {
     requestVersion++;
-    main.innerHTML = `<section class="lookup"><span class="eyebrow">BOOKING MANAGEMENT</span><h1>Review the<br>next chapter.</h1><p>Authorized project managers can review, confirm or decline booking requests. This is a single-manager demo, not a multi-host account system.</p><form id="manager-login"><label>Management access code<input name="code" type="password" autocomplete="off" minlength="32" maxlength="512" required></label><div id="manager-error" role="status">${e(error)}</div><button class="primary full">Open booking manager</button></form><p class="small">Use the private code configured on the backend or printed by your temporary demo backend. It stays in memory only and is cleared on sign-out or page reload.</p></section>`;
+    main.innerHTML = `<section class="lookup"><span class="eyebrow">HOST BOOKINGS</span><h1>Stay close to<br>every request.</h1><p>Sign in to review and manage your guests’ booking requests.</p><form id="manager-login"><label>Access code<input aria-label="Management access code" name="code" type="password" autocomplete="off" minlength="32" maxlength="512" required></label><div id="manager-error" role="status">${e(error)}</div><button class="primary full" aria-label="Open booking manager">Open bookings</button></form><p class="small">Your access code is cleared when you sign out or close this page.</p></section>`;
     main.querySelector("#manager-login").onsubmit = async (event) => {
       event.preventDefault();
       accessCode = new FormData(event.target).get("code").trim();

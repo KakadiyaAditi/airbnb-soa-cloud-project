@@ -202,7 +202,7 @@ export function mountDiscovery({
       ? "Show fewer destinations"
       : `Explore all ${facets.destinations.length} destinations`;
     root.querySelector("#inventory-summary").textContent =
-      `${facets.destinations.length} destinations available in the current inventory. Refresh to see new stays.`;
+      `${facets.destinations.length} destinations to explore. Refresh to see the latest stays.`;
     if (!places.length)
       grid.innerHTML =
         '<div class="empty"><h3>Your next destination starts here.</h3><p>No stays have been listed yet.</p><a class="primary" href="#/host">List the first stay</a></div>';
@@ -238,7 +238,7 @@ export function mountDiscovery({
     const button = root.querySelector("#refresh-inventory");
     button.disabled = true;
     root.querySelector("#inventory-summary").textContent =
-      "Loading destinations and filters from the listing API...";
+      "Finding destinations...";
     try {
       const listings = await fetchInventory(api, controller.signal);
       if (!root.isConnected) return;

@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HavenStay | Complete Code Walkthrough</title>
+<style>
+@page { size:A4; margin:14mm 16mm; }
+* { box-sizing:border-box; }
+body { margin:0; color:#26302d; font:9.4pt/1.43 "Segoe UI",Arial,sans-serif; }
+h1,h2,h3,p { margin-top:0; }
+h1 { color:#78382f; font-size:27pt; line-height:1.1; margin:3px 0 6px; }
+h2 { color:#78382f; font-size:16pt; line-height:1.2; margin:0 0 9px; }
+h3 { font-size:10.4pt; margin:0 0 3px; color:#35413c; }
+p { margin:0 0 7px; }
+ul,ol { margin:4px 0 8px; padding-left:19px; }
+li { margin:2px 0; }
+code { font:8.3pt Consolas,"Courier New",monospace; color:#63382f; background:#f5f2ee; padding:1px 3px; border-radius:3px; }
+.page { break-after:page; page-break-after:always; }
+.page:last-child { break-after:auto; page-break-after:auto; }
+.kicker { text-transform:uppercase; letter-spacing:1.4px; color:#a24b3e; font-weight:700; font-size:8pt; margin-bottom:5px; }
+.sub { color:#65716b; font-size:11pt; }
+.box { border:1px solid #dfe2dc; border-radius:8px; padding:9px 11px; margin:7px 0; }
+.soft { border:0; background:#f7f2eb; }
+.grid2 { display:grid; grid-template-columns:1fr 1fr; gap:7px; }
+.grid3 { display:grid; grid-template-columns:repeat(3,1fr); gap:7px; }
+.card { background:#faf9f6; border-left:3px solid #b44737; padding:7px 9px; break-inside:avoid; }
+.small { font-size:8.2pt; color:#67716c; }
+.flow { display:flex; align-items:stretch; gap:4px; margin:9px 0; }
+.node { flex:1; text-align:center; padding:7px 5px; border:1px solid #dfe2dc; border-radius:7px; background:#fbfbf9; font-size:8pt; }
+.arrow { align-self:center; color:#a24b3e; font-weight:bold; }
+table { border-collapse:collapse; width:100%; margin:6px 0; }
+th,td { text-align:left; vertical-align:top; border-bottom:1px solid #e1e4de; padding:5px 6px; }
+th { background:#f7f2eb; color:#78382f; }
+.tag { display:inline-block; background:#f5ece6; color:#78382f; padding:3px 7px; border-radius:12px; font-size:8pt; font-weight:700; }
+.footer { position:absolute; bottom:7mm; color:#87908a; font-size:7.5pt; }
+.qa { margin:0 0 7px; break-inside:avoid; }
+.qa strong { color:#78382f; }
+</style>
+</head>
+<body>
+<section class="page">
+  <div class="kicker">Beginner-friendly project documentation</div>
+  <h1>HavenStay<br>Code Walkthrough</h1>
+  <p class="sub">A guided explanation of the frontend, backend, database, and Docker setup</p>
+  <div class="box soft"><h3>What this guide covers</h3><p>This explains the main source files and how they work together. It focuses on the code that makes the product run, rather than repeating every CSS declaration or every test case line by line.</p></div>
+  <h2>Project in one minute</h2>
+  <p>HavenStay is an accommodation search and booking-request website. The frontend is JavaScript built with Vite. It calls a Node.js/Express backend using HTTP and JSON. The backend is organized into four logical services: Listing, Search, Availability and Booking. Mongoose connects those services to MongoDB.</p>
+  <p>Docker Compose starts three containers locally: the Nginx frontend, the API and MongoDB. The MongoDB container is configured as a one-node replica set so that booking transactions work.</p>
+  <div class="flow"><div class="node"><b>Browser</b><br>HTML, CSS, JS</div><div class="arrow">→</div><div class="node"><b>Nginx</b><br>web files + proxy</div><div class="arrow">→</div><div class="node"><b>Express API</b><br>four service modules</div><div class="arrow">→</div><div class="node"><b>MongoDB</b><br>persistent records</div></div>
+  <h2>Two important facts</h2>
+  <ul><li>The services are modules inside one backend application. They are not four separately deployed microservices.</li><li>The local Docker setup is running. The AWS template and deployment scripts are preparation; AWS resources have not been deployed.</li></ul>
+  <div class="box"><b>How to read code examples:</b> <code>GET /api/listings</code> is an HTTP address. <code>listing.service.js</code> is a source file. A “model” describes how a database record is shaped.</div>
+  <p class="footer">HavenStay · Full project code walkthrough</p>
+</section>
+
+<section class="page">
+  <div class="kicker">1 · Repository map</div><h2>Where the code lives</h2>
+  <table><tr><th>Path</th><th>What it contains</th></tr>
+    <tr><td><code>frontend/</code></td><td>Vite application, browser code, CSS, tests, E2E tests and the production Nginx image.</td></tr>
+    <tr><td><code>backend/src/</code></td><td>Express server, routes, controllers, services, MongoDB models, validation and shared helpers.</td></tr>
+    <tr><td><code>backend/scripts/</code></td><td>Seed data, isolated test runner and controlled verification/load helpers.</td></tr>
+    <tr><td><code>docker-compose.yml</code></td><td>Local multi-container application: MongoDB, database initializer, backend and frontend.</td></tr>
+    <tr><td><code>infra/</code>, <code>scripts/aws/</code></td><td>Prepared AWS infrastructure and deployment/evidence scripts. These do not mean AWS is already running.</td></tr>
+    <tr><td><code>performance/</code></td><td>Separate load-test configuration and performance guides.</td></tr>
+    <tr><td><code>README.md</code>, <code>*_GUIDE.md</code></td><td>Setup, architecture, Docker, booking correctness and project documentation.</td></tr>
+  </table>
+  <h2>Why the backend has layers</h2>
+  <div class="flow"><div class="node"><b>Route</b><br>Which URL?</div><div class="arrow">→</div><div class="node"><b>Controller</b><br>HTTP in/out</div><div class="arrow">→</div><div class="node"><b>Validator</b><br>Is input valid?</div><div class="arrow">→</div><div class="node"><b>Service</b><br>Business rules</div><div class="arrow">→</div><div class="node"><b>Model</b><br>MongoDB data</div></div>
+  <p>A route/controller should not contain all booking rules. The service is where business behavior lives. Models enforce data shape and indexes. This makes the same booking service usable from a controller, a seed script or a test.</p>
+  <div class="grid2"><div class="card"><h3>Frontend layering</h3><p>Page rendering and user interactions are in route modules; <code>api.js</code> handles HTTP; helper modules handle dates, saved choices, imagery and calendars; CSS files provide visual design.</p></div><div class="card"><h3>Build versus run</h3><p>The frontend Docker image first builds static website files with Node/Vite, then serves them from a smaller Nginx image. The backend container runs Node and connects to MongoDB.</p></div></div>
+  <p class="footer">Root directories: backend, frontend, infra, performance and scripts</p>
+</section>
+
+<section class="page">
+  <div class="kicker">2 · Frontend startup and routing</div><h2><code>frontend/index.html</code> and <code>src/main.js</code></h2>
+  <h3><code>index.html</code> — the browser entry page</h3><p>Defines the page metadata, HavenStay name, header navigation, menu button, main content region, footer and module script. The main element is empty at first; JavaScript renders the active page into it. Navigation links use hash routes such as <code>#/</code>, <code>#/host</code> and <code>#/listing/ID</code>.</p>
+  <h3><code>main.js</code> — application coordinator</h3><p>Imports the UI styles and modules, creates the API client, finds the main element and keeps route state. A <code>hashchange</code> listener calls <code>route()</code>. The router chooses Home, Host, Saved/Compare, Listing, Booking lookup, Booking details or Management, then renders the matching view.</p>
+  <p>It also contains the homepage and property-detail rendering, result loading, search/form event handlers, booking confirmation and cancellation, navigation menu behavior, share/copy helpers, and safe image fallback behavior.</p>
+  <div class="box soft"><h3>Route examples</h3><p><code>#/</code> discovery · <code>#/listing/abc...</code> property details · <code>#/booking</code> find a booking · <code>#/booking/abc...</code> booking details · <code>#/saved</code> saved stays · <code>#/compare</code> comparison · <code>#/host</code> publish a listing · <code>#/manage</code> manager workflow.</p></div>
+  <h3>Why route versions and abort signals exist</h3><p>Users can navigate away while an HTTP request is still running. A route-version check stops an old response replacing the new page. An <code>AbortController</code> cancels obsolete search requests so outdated results do not flash on screen.</p>
+  <h3>Page rendering and safe text</h3><p>Templates insert database values into HTML. The shared <code>escapeHtml</code> helper escapes characters such as <code>&lt;</code> and quotes before user-provided text is displayed. Image URLs are separately checked before use.</p>
+  <h3>Other root frontend files</h3><p><code>vite.config</code>-style setup is in package scripts; <code>playwright.config.js</code> starts Vite for browser tests. <code>public/</code> stores image assets that are copied into the final static build.</p>
+</section>
+
+<section class="page">
+  <div class="kicker">3 · Frontend modules</div><h2>What each JavaScript module does</h2>
+  <table><tr><th>File</th><th>Simple explanation</th></tr>
+    <tr><td><code>api.js</code></td><td>One shared HTTP client. Builds endpoint URLs, sends JSON, applies a 15-second timeout, parses standard responses and turns errors into a useful <code>ApiError</code>. Booking retries are limited to safe cases and reuse the same key.</td></tr>
+    <tr><td><code>discovery.js</code></td><td>Loads every page of listing inventory, removes duplicate IDs, builds destination/country/type/amenity facets and resolves typed place names. It also wires destination tiles, category buttons, filters and inventory refresh.</td></tr>
+    <tr><td><code>collections.js</code></td><td>Renders stay cards and save/compare buttons, synchronizes their state, displays toast messages and renders the Saved and Compare routes.</td></tr>
+    <tr><td><code>preferences.js</code></td><td>Stores only property IDs for saved/compared stays in browser local storage. Comparison is capped at three; browser storage failure does not break browsing.</td></tr>
+    <tr><td><code>calendar.js</code></td><td>Draws the monthly date picker. Marks reserved nights, enforces date limits and permits check-out on a day a previous guest leaves. It replaces old event listeners when refreshed.</td></tr>
+    <tr><td><code>bookingIntent.js</code></td><td>Hashes a normalized booking payload and stores/reuses a random idempotency key per intent. Guest names and emails are not stored in this key record.</td></tr>
+    <tr><td><code>host.js</code></td><td>Renders and validates the host listing form, checks photo links use HTTPS, converts form values to the API payload, calls listing creation and navigates to the new stay.</td></tr>
+    <tr><td><code>management.js</code></td><td>Prompts for the management access code, fetches paginated requests, filters by status and sends accept/decline/cancel actions to protected endpoints.</td></tr>
+    <tr><td><code>validation.js</code></td><td>Common date checking, night calculation, HTML escaping and safe image URL handling shared by other modules.</td></tr>
+    <tr><td><code>photos.js</code></td><td>Maps known bundled demo image URLs to local responsive photos, while keeping host-supplied and unknown URLs intact. Produces responsive <code>srcset</code> attributes.</td></tr>
+    <tr><td><code>itinerary.js</code></td><td>Creates and downloads an iCalendar <code>.ics</code> event from a booking so a guest can add dates to a calendar.</td></tr>
+    <tr><td><code>icons.js</code></td><td>Small reusable inline SVG icon snippets used by cards, navigation and controls.</td></tr>
+  </table>
+  <p class="small">The exact icon set and image choices are presentation assets; the API still supplies listing records and booking data.</p>
+</section>
+
+<section class="page">
+  <div class="kicker">4 · Frontend styles and user flows</div><h2>CSS files and a search request</h2>
+  <h3>Stylesheets</h3><p><code>style.css</code> contains base layout, typography, forms, cards and responsive defaults. <code>airbnb.css</code> contains inherited project visual styles and layout rules. <code>experience.css</code> styles discovery, calendar, host, manager and interactive details. <code>havenstay.css</code> provides HavenStay brand overrides and responsive refinements. CSS order matters: later rules can override earlier rules.</p>
+  <h3>Search flow</h3><ol><li>User enters a destination and filters.</li><li><code>main.js</code> combines values from the search and filter forms.</li><li><code>discovery.js</code> may resolve the typed destination to a canonical city and country.</li><li>The browser sends <code>GET /api/search?...&amp;page=1&amp;limit=8</code>.</li><li>The page displays stay cards and pagination using the returned data and metadata.</li></ol>
+  <h3>Details and booking flow</h3><ol><li>Opening a stay calls <code>GET /api/listings/:id</code> and requests upcoming reserved ranges.</li><li>The calendar helps select check-in/check-out; the form can check availability.</li><li>Client validation catches missing or impossible dates before submission.</li><li>The frontend creates a stable idempotency key, then sends guest details, listing ID and dates to <code>POST /api/bookings</code>.</li><li>The backend validates again, calculates the price itself and returns the booking reference/status.</li><li>The confirmation route loads current status by reference; guests can refresh, print, export calendar event or cancel.</li></ol>
+  <div class="box soft"><h3>Client validation is not the security boundary</h3><p>Browser checks improve the experience, but requests can be changed or sent without the website. The backend repeats all important validation and enforces availability in MongoDB.</p></div>
+  <p class="footer">The same API client is used by search, details, listing forms, booking and management screens.</p>
+</section>
+
+<section class="page">
+  <div class="kicker">5 · Backend startup and HTTP application</div><h2><code>backend/src/server.js</code> and <code>app.js</code></h2>
+  <h3><code>server.js</code> — process startup</h3><ol><li>Loads environment configuration.</li><li>Connects to MongoDB and waits for model indexes.</li><li>Stops startup if the database cannot support required transactions.</li><li>Builds the Express app and starts listening on the configured port, normally 5000.</li><li>On <code>SIGINT</code>/<code>SIGTERM</code>, stops accepting HTTP work and closes the database connection cleanly.</li></ol>
+  <h3><code>app.js</code> — middleware and endpoint wiring</h3><p>Creates an Express app, hides the Express signature header, trusts the first reverse proxy hop, then applies request metrics, Helmet security headers, CORS, and a small JSON-body parser. It mounts the API router at <code>/api</code>.</p>
+  <p>The health route <code>/health</code> (also <code>/api/health</code>) reports whether MongoDB is connected. If the database is down, it returns HTTP 503, which lets Docker or a load balancer avoid sending traffic to an unhealthy backend.</p>
+  <p>Unknown endpoints flow to <code>notFound.js</code>. Errors flow to <code>errorHandler.js</code>. Keeping those handlers at the end ensures consistent responses.</p>
+  <h3>Configuration and database connection</h3><p><code>config/env.js</code> reads environment variables and optional <code>backend/.env</code>. It selects the normal or test database, parses CORS origins and port, and bounds the Mongo connection pool setting. <code>config/db.js</code> connects through Mongoose, checks MongoDB reports a replica-set or sharded topology, and initializes model indexes before traffic is accepted.</p>
+  <div class="box"><b>Why refuse standalone MongoDB?</b> Booking transactions and the atomic night-reservation design depend on MongoDB transaction support. Silently running without it could break booking correctness.</div>
+</section>
+
+<section class="page">
+  <div class="kicker">6 · Routes, controllers and services</div><h2>How backend requests are handled</h2>
+  <h3>Routes: <code>backend/src/routes/index.js</code></h3><p>Defines the URL map and connects each HTTP method/path to a controller. It separates listing, search, availability, booking and admin routers. Confirmation and admin actions use the access-control middleware.</p>
+  <table><tr><th>Endpoint</th><th>Purpose</th></tr>
+    <tr><td><code>GET /api/listings</code></td><td>Page through listings.</td></tr><tr><td><code>GET /api/listings/:id</code></td><td>Fetch one listing.</td></tr><tr><td><code>POST /api/listings</code></td><td>Create a listing.</td></tr>
+    <tr><td><code>GET /api/search</code></td><td>Search and filter stays.</td></tr><tr><td><code>GET /api/availability</code></td><td>Check a listing/date range.</td></tr><tr><td><code>GET /api/availability/:id/bookings</code></td><td>Get public booked date ranges for the calendar.</td></tr>
+    <tr><td><code>POST /api/bookings</code></td><td>Submit a booking request.</td></tr><tr><td><code>GET /api/bookings/:id</code></td><td>Look up booking status/details.</td></tr><tr><td><code>PATCH /api/bookings/:id/status</code></td><td>Cancel as guest; manager confirmation is protected.</td></tr>
+    <tr><td><code>GET /api/admin/bookings</code></td><td>Protected booking manager list.</td></tr><tr><td><code>PATCH /api/admin/bookings/:id/status</code></td><td>Protected manager decision.</td></tr>
+  </table>
+  <h3>Controllers</h3><p><code>listing.controller.js</code>, <code>search.controller.js</code>, <code>availability.controller.js</code> and <code>booking.controller.js</code> adapt HTTP requests to service calls. They read path/query/body values, invoke validation/service logic, and send a JSON response. They should stay thin and avoid owning the business rules.</p>
+  <h3>Services</h3><div class="grid2"><div class="card"><h3>listing.service.js</h3><p>Reads, paginates and creates listings. It filters submitted properties through a writable-field list.</p></div><div class="card"><h3>search.service.js</h3><p>Builds safe Mongo filters, sorting and pagination. If dates are included, it asks Availability for unavailable listing IDs.</p></div><div class="card"><h3>availability.service.js</h3><p>Finds active bookings that overlap requested dates and returns safe date-only ranges.</p></div><div class="card"><h3>booking.service.js</h3><p>Checks the listing, capacity and conflicts; reserves individual nights; creates booking and transitions status safely.</p></div></div>
+  <p class="small">The code uses controller → service → model layering. Services can call another service directly, which is called service composition here.</p>
+</section>
+
+<section class="page">
+  <div class="kicker">7 · Data models and validation</div><h2>What MongoDB stores</h2>
+  <table><tr><th>Model / collection</th><th>Important fields and purpose</th></tr>
+    <tr><td><code>Listing.js</code> / listings</td><td>Property title, description, type, city/area/country, nightly price, capacity, bedrooms/bathrooms, amenities, image URLs and rating. Schema rules require key fields, limit values and allow only known property types.</td></tr>
+    <tr><td><code>Booking.js</code> / bookings</td><td>Listing reference, guest name/email, check-in/out, guests, nights, saved booking-time price, total and Pending/Confirmed/Cancelled status. The price snapshot stops future listing price changes altering an existing booking.</td></tr>
+    <tr><td><code>BookedNight.js</code> / bookednights</td><td>One record per held night: listing ID, date and booking ID. A unique index on listing+night is the final double-booking guard.</td></tr>
+  </table>
+  <h3>Indexes</h3><p>Indexes speed up common searches and add database rules. Listings index city/price/type/capacity/creation time. Bookings index listing/status/date fields for overlap checks, guest email/time for lookup patterns, and idempotency hash uniquely when present. Booked nights uniquely index <code>{ listingId, night }</code>.</p>
+  <h3>Validators</h3><ul><li><code>validators/common.js</code> parses strict <code>YYYY-MM-DD</code> UTC dates, rejects impossible/past dates and limits a stay to 30 nights.</li><li><code>booking.validator.js</code> checks JSON shape, ObjectId syntax, guest name/email, positive guest count, date range and allowed status transition values.</li><li><code>search.validator.js</code> validates optional query strings, numeric price bounds, type, guest count, amenities, sorting and paired dates.</li><li><code>availability.validator.js</code> requires a valid listing ID and date range.</li><li>Model-level Mongoose validation repeats field constraints when data is written.</li></ul>
+  <h3>Shared utility files</h3><p><code>utils/dates.js</code> performs date-only math in UTC and lists each occupied night. <code>utils/pagination.js</code> applies safe defaults and a maximum page size. <code>utils/response.js</code> creates the standard success envelope. <code>utils/ApiError.js</code> represents known HTTP errors. <code>validateObjectId.js</code> checks Mongo ID format. <code>databaseName.js</code> safely extracts the database name for environment guards.</p>
+</section>
+
+<section class="page">
+  <div class="kicker">8 · Booking correctness, step by step</div><h2>Why concurrent booking is safe</h2>
+  <p>A simple “check dates, then insert booking” has a race condition: two guests can both check before either one saves. This project does a pre-check for a friendly message, then relies on a unique database constraint and transaction for correctness.</p>
+  <ol><li><b>Validate input:</b> make sure listing ID, guest details, guest count and dates are valid.</li><li><b>Read listing:</b> check it exists, price is usable and capacity is large enough.</li><li><b>Pre-check:</b> look for overlapping Pending/Confirmed bookings.</li><li><b>Start transaction:</b> create one BookedNight document for each night in <code>[check-in, check-out)</code>.</li><li><b>Save booking:</b> create the booking and its price snapshot; save replay data if a key was supplied.</li><li><b>Commit:</b> all writes become visible together. Any error rolls all of them back.</li></ol>
+  <div class="box soft"><h3>Example: 10–12 June</h3><p>Occupied nights are 10 June and 11 June. The 12 June check-out date is free for a new guest to check in. This half-open date interval also makes adjacent stays possible.</p></div>
+  <h3>What happens in a race?</h3><p>If another request inserts one of the same listing-night pairs first, MongoDB rejects the unique-key collision. The transaction aborts, so the losing request leaves no partial nights or booking behind. The API returns a conflict, normally HTTP 409.</p>
+  <h3>Idempotency: safe retry after a lost response</h3><p>The client sends an <code>Idempotency-Key</code>. The backend stores a SHA-256 hash of that key, a fingerprint of normalized booking fields, and the original response. Repeating the same key with the same request returns the original result. Reusing it with different details returns an idempotency mismatch. The raw key is not stored; guest text is not part of the key index.</p>
+  <h3>Cancellation and status rules</h3><p>New booking status is Pending and it holds nights. Pending may become Confirmed or Cancelled. Confirmed may become Cancelled. Cancelled is terminal. Cancellation status and night-lock deletion happen in one transaction. A repeated cancellation is safe to repeat.</p>
+  <div class="box"><b>Files to remember:</b> <code>booking.service.js</code> contains the workflow; <code>transaction.js</code> wraps Mongo transactions; <code>BookedNight.js</code> defines the unique lock; <code>Booking.js</code> defines statuses and idempotency fields.</div>
+</section>
+
+<section class="page">
+  <div class="kicker">9 · Middleware and API safety</div><h2>Errors, access and monitoring</h2>
+  <h3>Consistent errors</h3><p><code>notFound.js</code> turns unmatched URLs into a 404. <code>errorHandler.js</code> maps validation, bad JSON, oversized body, CORS, Mongo connection and unexpected errors to a standard JSON response. It logs unexpected server errors but does not expose stack traces to the browser.</p>
+  <p>Successful responses use <code>{ success: true, data, meta? }</code>. Errors use <code>{ success: false, error: { code, message, details? } }</code>. Search/list endpoints include pagination metadata such as page, limit, total and total pages.</p>
+  <h3>Management access</h3><p><code>requireAdmin.js</code> protects manager endpoints. The secret token is configured on the server only and must be at least 32 characters. The browser sends it as a Bearer authorization header for that manager session. The comparison uses hashes and a timing-safe check. Never put this value in a <code>VITE_</code> frontend variable.</p>
+  <h3>HTTP protections</h3><ul><li>Helmet adds security headers.</li><li>CORS allows configured frontend origins and required headers.</li><li>JSON bodies are capped at 10 KB in Express.</li><li>Listing writes copy only an explicit set of allowed fields.</li><li>Search text is escaped before becoming a regular expression.</li><li>Object IDs, dates, numeric ranges and enum values are checked.</li></ul>
+  <h3>Metrics middleware</h3><p><code>middleware/metrics.js</code> optionally emits JSON metrics with service name, method, status, elapsed milliseconds, request ID and counts for requests/errors/booking conflicts. It avoids putting guest emails, booking IDs or bodies in metric dimensions. It is enabled in local Compose and can be collected by CloudWatch in the planned AWS environment.</p>
+  <h3>Database initialization</h3><p><code>models/index.js</code> registers Listing, Booking and BookedNight so Mongoose creates their indexes before startup is considered ready. Unique indexes are part of booking correctness, not just a speed improvement.</p>
+</section>
+
+<section class="page">
+  <div class="kicker">10 · Docker basics</div><h2>What containerization means</h2>
+  <p>A container is a packaged process with its application and needed libraries. Docker images are the blueprints. Containers are running copies of those images. Docker Compose describes how multiple containers connect.</p>
+  <h3><code>backend/Dockerfile</code></h3><ol><li>Starts from a small Node 22 Linux image.</li><li>Uses <code>/app</code> as the working directory.</li><li>Copies package manifests and runs <code>npm ci --omit=dev</code> so only production dependencies are installed.</li><li>Copies backend source/scripts into the image.</li><li>Runs as the non-root <code>node</code> user.</li><li>Sets production environment/port, exposes port 5000 inside the container, and defines a health check.</li><li>Starts with <code>node src/server.js</code>.</li></ol>
+  <h3><code>frontend/Dockerfile</code> — two-stage build</h3><ol><li>Build stage uses Node, installs dependencies, copies frontend source/public assets, and runs Vite production build.</li><li><code>VITE_API_URL=/</code> compiles same-origin API requests into the static site.</li><li>Runtime stage uses the smaller Nginx unprivileged image.</li><li>Copies only built static files and Nginx configuration into the final image. Node/npm are not needed to serve the finished files.</li></ol>
+  <h3>Why multi-stage?</h3><p>The build needs compilers and development packages; the running website only needs static files. Keeping only Nginx and those files makes the final frontend image smaller and reduces what is present at runtime.</p>
+  <div class="box soft"><b>Image versus container:</b> Dockerfile → build image → start container. Rebuilding creates a new image; Compose can recreate its container from that image.</div>
+  <p><code>.dockerignore</code> prevents folders such as <code>node_modules</code>, <code>dist</code>, tests, local environment files and Git data from being copied into Docker build context. This keeps builds lean and avoids accidentally shipping local secrets.</p>
+</section>
+
+<section class="page">
+  <div class="kicker">11 · Docker Compose and Nginx</div><h2>How the local containers cooperate</h2>
+  <h3><code>docker-compose.yml</code></h3><ul><li><b>mongo:</b> MongoDB 8.2 starts with replica set name <code>rs0</code>. A named volume <code>mongo-data</code> keeps database files across container replacement.</li><li><b>mongo-init:</b> waits for Mongo health, initializes the replica set if needed, then waits for it to elect a writable primary.</li><li><b>backend:</b> builds the API image and connects to <code>mongodb://mongo:27017/... ?replicaSet=rs0</code> using the Compose service name as a private DNS name. It waits until initialization completes.</li><li><b>frontend:</b> builds the frontend with <code>VITE_API_URL=/</code>, waits for backend health, and publishes container port 8080 only to host loopback at <code>localhost:8080</code>.</li></ul>
+  <div class="flow"><div class="node"><b>Browser</b><br>localhost:8080</div><div class="arrow">→</div><div class="node"><b>Frontend container</b><br>Nginx on 8080</div><div class="arrow">→</div><div class="node"><b>Backend container</b><br>Express on 5000</div><div class="arrow">→</div><div class="node"><b>Mongo container</b><br>27017 internal</div></div>
+  <h3><code>frontend/nginx.conf</code></h3><p>Nginx serves built files from <code>/usr/share/nginx/html</code>. Requests to <code>/api/...</code> or <code>/health</code> are forwarded to <code>http://backend:5000</code>. Other paths serve the single-page app entry point. The browser only sees <code>localhost:8080</code>; it must not call the Docker-only name <code>backend</code>.</p>
+  <h3>Network, port, volume and health</h3><p>Compose automatically creates a private network and DNS entries by service name. Only frontend port 8080 is published to the host. Mongo has no public host port in this file. The named volume stores database records. Health checks and <code>depends_on</code> help services start in the right order.</p>
+  <div class="box"><b>Data persistence:</b> Restarting/recreating containers does not remove the named volume. <code>docker compose down</code> keeps it. Adding <code>-v</code> to down removes the volume and deletes that local database.</div>
+  <p class="footer">Local website: http://localhost:8080 · local API is reached through Nginx at /api/...</p>
+</section>
+
+<section class="page">
+  <div class="kicker">12 · Environment and running the project</div><h2>Configuration and useful commands</h2>
+  <h3>Environment files</h3><p>Root <code>.env.example</code> shows <code>WEB_PORT</code> and a placeholder admin token for Compose. <code>backend/.env.example</code> documents database URL, server port, CORS origins, secret, pool size and metrics options. <code>frontend/.env.example</code> documents the frontend API base URL for manual development. Real <code>.env</code> files are ignored by Git.</p>
+  <table><tr><th>Variable</th><th>Role</th></tr><tr><td><code>MONGODB_URI</code></td><td>Backend connection to the normal database.</td></tr><tr><td><code>MONGODB_URI_TEST</code></td><td>Separate test database; test runners can clear it.</td></tr><tr><td><code>PORT</code></td><td>HTTP port inside backend, normally 5000.</td></tr><tr><td><code>CORS_ORIGIN</code></td><td>Frontend origins allowed to call API directly.</td></tr><tr><td><code>ADMIN_API_TOKEN</code></td><td>Private manager access; server-side only.</td></tr><tr><td><code>VITE_API_URL</code></td><td>Frontend build-time API base. In Docker it is <code>/</code>.</td></tr></table>
+  <h3>Typical local Docker commands (PowerShell)</h3><p><code>docker compose up --build -d</code> builds/starts containers. <code>docker compose ps</code> shows status. <code>docker compose logs --tail 50 backend</code> reads API logs. <code>docker compose exec backend node scripts/seed.js --force</code> loads sample records and replaces records in this project database—only use when that reset is intended. <code>docker compose down</code> stops containers but preserves data volume.</p>
+  <h3>Manual development commands</h3><p>Backend: install dependencies, configure a replica-set MongoDB URI, seed only if desired, then run <code>npm run dev</code>. Frontend: install dependencies, set <code>VITE_API_URL=http://localhost:5000</code>, then run <code>npm run dev</code>. The browser opens Vite at <code>localhost:5173</code> and calls backend port 5000.</p>
+  <h3>Seed files</h3><p><code>backend/scripts/seedData.js</code> contains sample listings. <code>seed.js</code> connects, clears listings/bookings/night locks, inserts listings, then creates sample bookings through the real Booking Service so reservations follow the same rules. It refuses production seeding unless explicitly forced.</p>
+  <div class="box soft"><b>Production guard:</b> Never seed a database with data you need to keep. Read the database name and connection configuration before running seed or test commands.</div>
+</section>
+
+<section class="page">
+  <div class="kicker">13 · Cloud deployment and operations</div><h2>What the AWS files represent</h2>
+  <p>The local Compose stack is real and running. The AWS architecture and infrastructure files are prepared plans/templates—not evidence of an AWS deployment.</p>
+  <table><tr><th>File/group</th><th>Role</th></tr>
+    <tr><td><code>CLOUD_ARCHITECTURE.md</code></td><td>Explains planned load balancer, EC2 Auto Scaling, containers, shared MongoDB, secrets, metrics and important limitations.</td></tr>
+    <tr><td><code>infra/option-b.json</code></td><td>CloudFormation-style infrastructure template for networking references, ALB, launch configuration, Auto Scaling and monitoring resources.</td></tr>
+    <tr><td><code>infra/parameters.example.json</code></td><td>Placeholder examples for VPC/subnets, certificate, secret and container image locations. Replace only with reviewed real values.</td></tr>
+    <tr><td><code>infra/bootstrap.sh</code></td><td>Instance bootstrap helper to prepare/run containerized application services.</td></tr>
+    <tr><td><code>scripts/aws/deploy.ps1</code></td><td>PowerShell deployment helper that coordinates template/image operations. It does not prove deployment happened unless run successfully against an account.</td></tr>
+    <tr><td><code>scripts/aws/collect-evidence.ps1</code></td><td>Collects actual monitoring/scaling evidence rather than inventing performance results.</td></tr>
+    <tr><td><code>scripts/check-deployment.cjs</code></td><td>Smoke-checks a chosen running URL: health, listing, booking, same-key replay, conflict and cancellation. It creates synthetic data and must target an approved demo.</td></tr>
+  </table>
+  <h3>Planned AWS request path</h3><p>HTTPS browser → Application Load Balancer → Nginx frontend container → local API container → shared persistent MongoDB. The load balancer can spread traffic across EC2 instances. The instances should not each keep their own copy of booking state.</p>
+  <h3>What production still needs</h3><p>A chosen persistent MongoDB provider/topology, backups and restore testing, VPC/subnet IDs, TLS certificate, private secret, container images in a registry, IAM review, actual deployment, monitoring evidence and load testing. One-node local replica set is suitable for transaction testing, not highly available production data.</p>
+  <div class="box soft"><b>Be precise in a presentation:</b> “We prepared an AWS architecture and deployment template” is true. “We deployed this to AWS” is not currently true.</div>
+</section>
+
+<section class="page">
+  <div class="kicker">14 · Testing and quality</div><h2>How the code is checked</h2>
+  <h3>Backend tests</h3><p><code>backend/tests/</code> contains API and service tests for listing, search, availability, bookings, validation, transaction behavior, retries and metrics. <code>npm test</code> uses Jest/Supertest. <code>npm run test:isolated</code> starts a temporary transaction-capable MongoDB test deployment so the ordinary database is not used.</p>
+  <h3>Frontend tests</h3><p><code>frontend/tests/</code> covers date rules, API payloads, search resolution, photo mapping, saved choices, calendar ranges, safe rendering and booking retry behavior. <code>npm test</code> runs the unit/API tests with Node’s test runner.</p>
+  <p><code>frontend/e2e/</code> uses Playwright to drive browser flows such as search, booking, cancellation, host listing publication, management, mobile layouts and accessibility checks. Run with <code>npm run test:e2e -- --workers=1</code>.</p>
+  <h3>Build and style checks</h3><p><code>npm run build</code> compiles the production frontend. <code>npm run format:check</code> checks consistent formatting. Docker’s frontend image runs the same production build during image creation.</p>
+  <h3>Additional verification scripts</h3><p>The frontend has backend contract and live integration scripts. Root <code>scripts/check-deployment.cjs</code> checks an already running stack. Load-testing scripts are separated from normal demo/test data and require explicit load-test configuration.</p>
+  <div class="box"><h3>Why tests matter</h3><p>Unit tests check small rules quickly. API tests check HTTP shapes and status codes. Browser tests check user journeys. A production build catches import/compile problems. A smoke test checks a deployed stack from outside.</p></div>
+  <p class="small">Do not describe a mocked browser API test as a live cloud test. Each test type proves a different thing.</p>
+</section>
+
+<section class="page">
+  <div class="kicker">15 · End-to-end example</div><h2>A booking request through all layers</h2>
+  <table><tr><th>Step</th><th>File(s)</th><th>What happens</th></tr>
+    <tr><td>1. Guest picks dates</td><td><code>main.js</code>, <code>calendar.js</code></td><td>UI validates dates and shows reserved nights.</td></tr>
+    <tr><td>2. Browser sends request</td><td><code>bookingIntent.js</code>, <code>api.js</code></td><td>Creates/reuses an idempotency key and sends JSON to <code>POST /api/bookings</code>.</td></tr>
+    <tr><td>3. Request reaches API</td><td><code>nginx.conf</code>, <code>app.js</code>, <code>routes/index.js</code></td><td>Nginx proxies it; Express parses JSON and router chooses Booking controller.</td></tr>
+    <tr><td>4. Input checked</td><td><code>booking.controller.js</code>, booking/common validators</td><td>Checks body, dates, ID, name, email, guests and idempotency-key format.</td></tr>
+    <tr><td>5. Business rules applied</td><td><code>booking.service.js</code>, Listing and Availability services</td><td>Checks listing/capacity, calculates number of nights and price, checks overlaps.</td></tr>
+    <tr><td>6. Database writes protected</td><td><code>transaction.js</code>, <code>BookedNight.js</code>, <code>Booking.js</code></td><td>Creates per-night locks and the Pending booking together; unique index settles races.</td></tr>
+    <tr><td>7. Response rendered</td><td><code>response.js</code>, <code>main.js</code></td><td>Returns HTTP 201 and booking reference; frontend opens confirmation page.</td></tr>
+    <tr><td>8. Later cancellation</td><td>Booking route/controller/service</td><td>Changes status and deletes reserved nights atomically; dates become available again.</td></tr>
+  </table>
+  <div class="box soft"><h3>In one sentence</h3><p>The frontend makes booking convenient; the backend validates business rules; MongoDB indexes and transactions preserve correctness even when requests arrive at the same time.</p></div>
+  <h2>Useful response shapes</h2><p>Success: <code>{"success":true,"data":{...}}</code>. A paginated endpoint also has <code>meta</code>. A conflict/error: <code>{"success":false,"error":{"code":"BOOKING_CONFLICT","message":"..."}}</code>.</p>
+</section>
+
+<section class="page">
+  <div class="kicker">16 · Glossary and quick recap</div><h2>Plain-language glossary</h2>
+  <table><tr><th>Word</th><th>Simple meaning</th></tr>
+    <tr><td>Frontend</td><td>The website users see and interact with.</td></tr><tr><td>Backend</td><td>The server that applies rules and talks to the database.</td></tr><tr><td>API</td><td>A defined way for programs to request data/actions over HTTP.</td></tr><tr><td>JSON</td><td>A text format for structured data sent between browser and server.</td></tr><tr><td>Container</td><td>An isolated running application process with its dependencies.</td></tr><tr><td>Image</td><td>A reusable template used to create a container.</td></tr><tr><td>Volume</td><td>Persistent storage that lives outside a replaceable container.</td></tr><tr><td>Replica set</td><td>MongoDB servers that coordinate replicated data and enable transactions; this local setup has one member.</td></tr><tr><td>Transaction</td><td>A group of database writes that all commit or all roll back.</td></tr><tr><td>Idempotency</td><td>Repeating the same request safely returns the same outcome instead of duplicating work.</td></tr><tr><td>Reverse proxy</td><td>A server that accepts a request and forwards it to another service.</td></tr><tr><td>Health check</td><td>A small request used to find out whether a service is ready.</td></tr><tr><td>Scale out</td><td>Add more application instances to handle more traffic.</td></tr>
+  </table>
+  <h2>Five points to remember</h2><ol><li>Frontend: JavaScript/Vite. Backend: Node/Express. Data: MongoDB/Mongoose.</li><li>Listing, Search, Availability and Booking are logical backend modules.</li><li>Booking uses a replica-set transaction plus unique per-night index.</li><li>Docker Compose connects Nginx, API and Mongo; the volume persists local database data.</li><li>AWS infrastructure is prepared, not deployed.</li></ol>
+  <div class="box soft"><h3>Good final summary for a viva</h3><p>“HavenStay is a modular accommodation booking application. Its frontend calls Express REST endpoints, and MongoDB stores listing and booking data. Docker Compose runs the local stack. Transactions, unique night records and idempotency make booking safer. We prepared a cloud scaling design, but the AWS deployment itself remains future work.”</p></div>
+  <p class="footer">End of guide · Keep the repository open to point to each file during your explanation.</p>
+</section>
+</body>
+</html>
