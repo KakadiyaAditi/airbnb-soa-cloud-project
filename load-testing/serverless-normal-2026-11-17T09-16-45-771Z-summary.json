@@ -1,0 +1,28 @@
+{
+  "test": "normal",
+  "concurrency": 5,
+  "duration_seconds": 30,
+  "total_requests": 154,
+  "successful_requests": 154,
+  "failed_requests": 0,
+  "failure_percent": 0,
+  "throughput_requests_per_second": 5.13,
+  "average_response_ms": 476.23,
+  "median_response_ms": 210.79,
+  "p95_response_ms": 713.7,
+  "p99_response_ms": 6853.62,
+  "min_response_ms": 35.85,
+  "max_response_ms": 7853.11,
+  "endpoints": [
+    {
+      "endpoint": "/api/health",
+      "requests": 77,
+      "failures": 0
+    },
+    {
+      "endpoint": "/api/listings",
+      "requests": 77,
+      "failures": 0
+    }
+  ]
+}

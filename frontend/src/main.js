@@ -485,7 +485,7 @@ async function listing(id, version) {
 }
 
 function lookup() {
-  main.innerHTML = `<section class="lookup"><span class="eyebrow">YOUR NEXT CHAPTER</span><h1>A stay to look<br><em>forward to.</em></h1><p>Enter the booking reference from your request to view its details.</p><form id="lookup">${input("Booking reference", "reference", "text", 'required pattern="[a-fA-F0-9]{24}" title="Enter the 24-character booking reference" placeholder="Your 24-character reference"')}<button class="primary full">Find my booking ↗</button></form></section>`;
+  main.innerHTML = `<section class="lookup"><span class="eyebrow">YOUR NEXT CHAPTER</span><h1>A stay to look<br><em>forward to.</em></h1><p>Enter the booking reference from your request to view its details.</p><form id="lookup">${input("Booking reference", "reference", "text", 'required pattern="(?:[a-fA-F0-9]{24}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})" title="Enter your booking reference" placeholder="Your booking reference"')}<button class="primary full">Find my booking ↗</button></form></section>`;
   document.querySelector("#lookup").onsubmit = (event) => {
     event.preventDefault();
     location.hash = `/booking/${new FormData(event.target).get("reference").trim()}`;
