@@ -1,0 +1,28 @@
+{
+  "test": "holiday",
+  "concurrency": 20,
+  "duration_seconds": 30,
+  "total_requests": 833,
+  "successful_requests": 825,
+  "failed_requests": 8,
+  "failure_percent": 0.96,
+  "throughput_requests_per_second": 27.77,
+  "average_response_ms": 222.7,
+  "median_response_ms": 129.5,
+  "p95_response_ms": 652.35,
+  "p99_response_ms": 1004.64,
+  "min_response_ms": 30.84,
+  "max_response_ms": 1201.7,
+  "endpoints": [
+    {
+      "endpoint": "/api/health",
+      "requests": 415,
+      "failures": 2
+    },
+    {
+      "endpoint": "/api/listings",
+      "requests": 418,
+      "failures": 6
+    }
+  ]
+}

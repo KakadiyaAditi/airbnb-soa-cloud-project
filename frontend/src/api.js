@@ -8,6 +8,23 @@ export class ApiError extends Error {
     this.details = error?.details || [];
   }
 }
+
+// Preserve the existing frontend's _id convention while accepting
+// the serverless API's listingId and bookingId fields.
+function normalizeData(value) {
+  if (Array.isArray(value)) return value.map(normalizeData);
+  if (!value || typeof value !== "object") return value;
+
+  const result = Object.fromEntries(
+    Object.entries(value).map(([key, item]) => [key, normalizeData(item)]),
+  );
+
+  if (!result._id && result.bookingId) result._id = result.bookingId;
+  else if (!result._id && result.listingId) result._id = result.listingId;
+
+  return result;
+}
+
 export function createApi(
   base = "http://localhost:5000",
   fetcher = globalThis.fetch,
@@ -17,6 +34,7 @@ export function createApi(
     const signal = options.signal
       ? AbortSignal.any([options.signal, timeout])
       : timeout;
+
     let response;
     try {
       response = await fetcher(`${base.replace(/\/$/, "")}${path}`, {
@@ -27,10 +45,12 @@ export function createApi(
         },
         signal,
       });
+
       const body = await response.json().catch((error) => {
         if (signal.aborted) throw error;
         return {};
       });
+
       if (!response.ok || !body.success) {
         const error = new ApiError(response.status, body.error);
         const seconds = Number(response.headers?.get("Retry-After"));
@@ -38,7 +58,19 @@ export function createApi(
           Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 0;
         throw error;
       }
-      return { ...body, data: withPhotoAssets(body.data) };
+
+      const meta = body.meta
+        ? {
+            ...body.meta,
+            totalPages: body.meta.totalPages ?? body.meta.pages,
+          }
+        : body.meta;
+
+      return {
+        ...body,
+        meta,
+        data: withPhotoAssets(normalizeData(body.data)),
+      };
     } catch (error) {
       if (error instanceof ApiError) throw error;
       if (options.signal?.aborted) throw options.signal.reason;
@@ -55,10 +87,12 @@ export function createApi(
       });
     }
   }
+
   const query = (params) =>
     new URLSearchParams(
       Object.entries(params).filter(([, v]) => v !== "" && v != null),
     ).toString();
+
   async function book(booking, key) {
     for (let attempt = 0; ; attempt++) {
       try {
@@ -68,7 +102,6 @@ export function createApi(
           body: JSON.stringify(booking),
         });
       } catch (error) {
-        // Retrying a write is safe only with the SAME durable request key.
         if (
           !key ||
           attempt >= 2 ||
@@ -76,6 +109,7 @@ export function createApi(
           error.retryAfterMs > 3000
         )
           throw error;
+
         await new Promise((resolve) =>
           setTimeout(
             resolve,
@@ -88,11 +122,46 @@ export function createApi(
       }
     }
   }
-  return {
-    managerBookings: (token, status = "Pending", page = 1) =>
-      request(`/api/admin/bookings?${query({ status, page, limit: 10 })}`, {
-        headers: { Authorization: `Bearer ${token}` },
+
+  async function listing(id) {
+    return request(`/api/listings/${encodeURIComponent(id)}`);
+  }
+
+  async function booking(id) {
+    const result = await request(`/api/bookings/${encodeURIComponent(id)}`);
+    const record = result.data;
+
+    // The serverless booking response stores listingId, not a nested listing.
+    if (record?.listingId && !record.listing) {
+      const listingResult = await listing(record.listingId);
+      record.listing = listingResult.data;
+    }
+
+    return result;
+  }
+
+  async function managerBookings(token, status = "Pending", page = 1) {
+    const result = await request(
+      `/api/admin/bookings?${query({ status, page, limit: 10 })}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+
+    // The management UI displays listing details alongside each booking.
+    result.data = await Promise.all(
+      result.data.map(async (record) => {
+        if (record.listingId && !record.listing) {
+          const listingResult = await listing(record.listingId);
+          record.listing = listingResult.data;
+        }
+        return record;
       }),
+    );
+
+    return result;
+  }
+
+  return {
+    managerBookings,
     managerStatus: (token, id, bookingStatus) =>
       request(`/api/admin/bookings/${encodeURIComponent(id)}/status`, {
         method: "PATCH",
@@ -101,20 +170,20 @@ export function createApi(
       }),
     listings: (page = 1, limit = 50, signal) =>
       request(`/api/listings?${query({ page, limit })}`, { signal }),
-    createListing: (listing) =>
+    createListing: (listingData) =>
       request("/api/listings", {
         method: "POST",
-        body: JSON.stringify(listing),
+        body: JSON.stringify(listingData),
       }),
     search: (filters, signal) =>
       request(`/api/search?${query(filters)}`, { signal }),
-    listing: (id) => request(`/api/listings/${encodeURIComponent(id)}`),
+    listing,
     ranges: (id) =>
       request(`/api/availability/${encodeURIComponent(id)}/bookings`),
     availability: (listingId, checkIn, checkOut) =>
       request(`/api/availability?${query({ listingId, checkIn, checkOut })}`),
     book,
-    booking: (id) => request(`/api/bookings/${encodeURIComponent(id)}`),
+    booking,
     cancel: (id) =>
       request(`/api/bookings/${encodeURIComponent(id)}/status`, {
         method: "PATCH",

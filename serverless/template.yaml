@@ -1,0 +1,290 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: StayFinder serverless SOA - Listing, Search, Availability and Booking
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: dev
+    AllowedPattern: '^[a-zA-Z0-9-]+$'
+  AdminApiToken:
+    Type: String
+    NoEcho: true
+    MinLength: 32
+    Description: Secret bearer token for admin booking operations
+
+Globals:
+  Function:
+    Runtime: nodejs22.x
+    Architectures:
+      - arm64
+    Timeout: 20
+    MemorySize: 256
+    CodeUri: .
+    Handler: src/shared/app.handler
+    Environment:
+      Variables:
+        LISTINGS_TABLE: !Ref ListingsTable
+        BOOKINGS_TABLE: !Ref BookingsTable
+        RESERVATIONS_TABLE: !Ref ReservationsTable
+        IDEMPOTENCY_TABLE: !Ref IdempotencyTable
+        ADMIN_API_TOKEN: !Ref AdminApiToken
+    Tags:
+      Project: StayFinder
+      Environment: !Ref EnvironmentName
+
+Resources:
+  StayFinderApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Ref EnvironmentName
+      CorsConfiguration:
+        AllowOrigins:
+          - '*'
+        AllowHeaders:
+          - content-type
+          - authorization
+          - idempotency-key
+        AllowMethods:
+          - GET
+          - POST
+          - PATCH
+          - OPTIONS
+        MaxAge: 600
+
+  ListingsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'stayfinder-${EnvironmentName}-listings'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: listingId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: listingId
+          KeyType: HASH
+      SSESpecification:
+        SSEEnabled: true
+
+  BookingsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'stayfinder-${EnvironmentName}-bookings'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: bookingId
+          AttributeType: S
+        - AttributeName: bookingStatus
+          AttributeType: S
+        - AttributeName: createdAt
+          AttributeType: S
+        - AttributeName: guestEmail
+          AttributeType: S
+      KeySchema:
+        - AttributeName: bookingId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: StatusCreatedAtIndex
+          KeySchema:
+            - AttributeName: bookingStatus
+              KeyType: HASH
+            - AttributeName: createdAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: GuestEmailCreatedAtIndex
+          KeySchema:
+            - AttributeName: guestEmail
+              KeyType: HASH
+            - AttributeName: createdAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      SSESpecification:
+        SSEEnabled: true
+
+  ReservationsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'stayfinder-${EnvironmentName}-reservations'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: listingId
+          AttributeType: S
+        - AttributeName: night
+          AttributeType: S
+        - AttributeName: bookingId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: listingId
+          KeyType: HASH
+        - AttributeName: night
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: BookingIdIndex
+          KeySchema:
+            - AttributeName: bookingId
+              KeyType: HASH
+            - AttributeName: night
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      SSESpecification:
+        SSEEnabled: true
+
+  IdempotencyTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'stayfinder-${EnvironmentName}-idempotency'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: keyHash
+          AttributeType: S
+      KeySchema:
+        - AttributeName: keyHash
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+      SSESpecification:
+        SSEEnabled: true
+
+  ListingsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Environment:
+        Variables:
+          SERVICE_NAME: listings
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ListingsTable
+      Events:
+        Health:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref StayFinderApi
+            Path: /api/health
+            Method: GET
+        ListListings:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref StayFinderApi
+            Path: /api/listings
+            Method: GET
+        CreateListing:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref StayFinderApi
+            Path: /api/listings
+            Method: POST
+        GetListing:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref StayFinderApi
+            Path: /api/listings/{id}
+            Method: GET
+
+  SearchFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Environment:
+        Variables:
+          SERVICE_NAME: search
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref ListingsTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref ReservationsTable
+      Events:
+        Search:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref StayFinderApi
+            Path: /api/search
+            Method: GET
+
+  AvailabilityFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Environment:
+        Variables:
+          SERVICE_NAME: availability
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref ListingsTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref ReservationsTable
+      Events:
+        CheckAvailability:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref StayFinderApi
+            Path: /api/availability
+            Method: GET
+        ListingBookedRanges:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref StayFinderApi
+            Path: /api/availability/{listingId}/bookings
+            Method: GET
+
+  BookingsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Timeout: 30
+      Environment:
+        Variables:
+          SERVICE_NAME: bookings
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref ListingsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref BookingsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ReservationsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref IdempotencyTable
+      Events:
+        CreateBooking:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref StayFinderApi
+            Path: /api/bookings
+            Method: POST
+        GetBooking:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref StayFinderApi
+            Path: /api/bookings/{id}
+            Method: GET
+        ChangeBookingStatus:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref StayFinderApi
+            Path: /api/bookings/{id}/status
+            Method: PATCH
+        AdminBookings:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref StayFinderApi
+            Path: /api/admin/bookings
+            Method: GET
+        AdminBookingStatus:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref StayFinderApi
+            Path: /api/admin/bookings/{id}/status
+            Method: PATCH
+
+Outputs:
+  ApiBaseUrl:
+    Description: API Gateway base URL - configure this as VITE_API_URL
+    Value: !Sub 'https://${StayFinderApi}.execute-api.${AWS::Region}.amazonaws.com/${EnvironmentName}'
+  ListingsTableName:
+    Value: !Ref ListingsTable
+  BookingsTableName:
+    Value: !Ref BookingsTable
+  ReservationsTableName:
+    Value: !Ref ReservationsTable
+  IdempotencyTableName:
+    Value: !Ref IdempotencyTable
